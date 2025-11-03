@@ -22,9 +22,9 @@ Different Wayland compositors provide different APIs for window information:
 - ✅ You want to use Profile Mode (app-specific button mappings)
 
 **You DON'T need kdotool if:**
-- ❌ You're using Simple Mode (single mapping for all apps)
 - ❌ You're using GNOME, Sway, or Hyprland
 - ❌ You're running X11
+- ❌ You only use the default profile (no app-specific profiles)
 
 ## Installation
 
@@ -194,28 +194,9 @@ If it returns nothing or errors, kdotool might not be compatible with your KDE P
 # - Whether kdotool is being used
 ```
 
-### Alternative: Use Simple Mode
+### Alternative: Use Default Profile Only
 
-If kdotool doesn't work or you don't want to install it, you can use Simple Mode:
-
-```ini
-# In ~/.config/tourbox/mappings.conf
-# Comment out or remove all [profile:*] sections
-# Only use [buttons] and [rotary] sections
-
-[device]
-mac_address = XX:XX:XX:XX:XX:XX
-
-[buttons]
-side = KEY_LEFTMETA
-# ... your mappings
-
-[rotary]
-knob_cw = KEY_LEFTCTRL+KEY_EQUAL
-# ... your mappings
-```
-
-Simple Mode works on all systems and doesn't require kdotool.
+If kdotool doesn't work or you don't want to install it, you can use only the default profile without app-specific profiles. The driver will always use `[profile:default]` mappings regardless of which window is focused.
 
 ## Technical Details
 
@@ -261,9 +242,9 @@ The repository includes `kwin_active_window.js` which is a KWin script approach 
 
 Older KDE Plasma 5 had D-Bus APIs for window info. These were removed in Plasma 6, which is why kdotool is needed.
 
-### 3. Switch to Simple Mode
+### 3. Use Default Profile Only
 
-Just use one mapping for all applications (no window detection needed).
+Just use the `[profile:default]` mappings for all applications (no window detection needed).
 
 ## Summary
 
@@ -272,7 +253,7 @@ Just use one mapping for all applications (no window detection needed).
 - **Install with:** `cargo install kdotool` (after installing Rust and dependencies)
 - Only needed for KDE Plasma users who want app-specific profiles
 - Other compositors (GNOME, Sway, Hyprland) don't need it
-- Simple Mode works everywhere without kdotool
+- Without kdotool, the driver uses `[profile:default]` for all applications
 
 ## Quick Install Reference
 
