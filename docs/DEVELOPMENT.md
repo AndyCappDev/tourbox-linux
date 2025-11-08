@@ -253,7 +253,7 @@ tourboxelite/
 │       ├── driver_manager.py                       # Driver service management widget
 │       ├── ble_listener.py                         # BLE event listener for live testing
 │       ├── config_writer.py                        # Config file write operations (atomic saves)
-│       ├── README.md                                # GUI package documentation
+│       ├── README.md                               # GUI package documentation
 │       ├── requirements.txt                        # GUI-specific dependencies (PySide6, qasync)
 │       └── assets/                                 # GUI assets
 │           ├── tourbox_elite.svg                   # Main controller SVG image (Text converted to paths)
