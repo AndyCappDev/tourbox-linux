@@ -362,6 +362,7 @@ cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=TourBox Elite Driver
 After=graphical-session.target
+PartOf=graphical-session.target
 
 [Service]
 Type=simple
@@ -370,7 +371,7 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target
 EOF
 
 echo -e "${GREEN}✓${NC} Installed systemd service"
