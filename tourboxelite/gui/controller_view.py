@@ -25,6 +25,8 @@ class ControllerView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._current_control = None
+        self._current_is_modifier = False
+        self._combo_control = None  # Additional control to highlight for modifier combos
         self._svg_renderer = None
         self._svg_path = None
         self._svg_data = None
@@ -69,20 +71,26 @@ class ControllerView(QWidget):
         self.svg_widget.set_svg_data(self._svg_renderer, self._svg_data)
         logger.info(f"Loaded SVG from: {self._svg_path}")
 
-    def highlight_control(self, control_name: str):
+    def highlight_control(self, control_name: str, is_modifier: bool = False, combo_control: str = None):
         """Highlight a specific control on the image
 
         Args:
             control_name: Name of the control to highlight (e.g., 'side', 'knob_cw')
+            is_modifier: Whether this control is a modifier button
+            combo_control: Optional additional control to highlight (for modifier combinations)
         """
         self._current_control = control_name
-        self.svg_widget.set_highlighted_control(control_name)
-        logger.debug(f"Highlighted control: {control_name}")
+        self._current_is_modifier = is_modifier
+        self._combo_control = combo_control
+        self.svg_widget.set_highlighted_control(control_name, is_modifier, combo_control)
+        logger.debug(f"Highlighted control: {control_name} (modifier: {is_modifier}, combo: {combo_control})")
 
     def clear_highlight(self):
         """Clear the current highlight"""
         self._current_control = None
-        self.svg_widget.set_highlighted_control(None)
+        self._current_is_modifier = False
+        self._combo_control = None
+        self.svg_widget.set_highlighted_control(None, False, None)
         logger.debug("Cleared highlight")
 
 
@@ -103,15 +111,27 @@ class SVGControllerWidget(QWidget):
         self._svg_data = svg_data
         self.update()
 
-    def set_highlighted_control(self, control_name: str):
-        """Set which control to highlight"""
+    def set_highlighted_control(self, control_name: str, is_modifier: bool = False, combo_control: str = None):
+        """Set which control(s) to highlight
+
+        Args:
+            control_name: Primary control to highlight
+            is_modifier: Whether the primary control is a modifier
+            combo_control: Optional additional control to highlight from controls layer
+        """
         self._highlighted_control = control_name
 
-        # Create a renderer with the selected control visible
+        # Create a renderer with the selected control(s) visible
         if control_name and self._svg_data:
             try:
-                # Parse SVG and make the control visible
-                modified_svg = self._make_control_visible(self._svg_data, control_name)
+                # Build list of controls to highlight
+                controls_to_highlight = [(control_name, is_modifier)]
+                if combo_control:
+                    # Combo control is always from controls layer
+                    controls_to_highlight.append((combo_control, False))
+
+                # Parse SVG and make the controls visible
+                modified_svg = self._make_controls_visible(self._svg_data, controls_to_highlight)
                 if modified_svg:
                     self._highlight_renderer = QSvgRenderer(QByteArray(modified_svg))
                 else:
@@ -124,8 +144,81 @@ class SVGControllerWidget(QWidget):
 
         self.update()
 
-    def _make_control_visible(self, svg_data: bytes, control_id: str) -> bytes:
-        """Modify SVG to show only the specified control"""
+    def _make_controls_visible(self, svg_data: bytes, controls: list) -> bytes:
+        """Modify SVG to show multiple specified controls
+
+        Args:
+            svg_data: The raw SVG data
+            controls: List of tuples (control_id, is_modifier)
+        """
+        try:
+            # Register namespaces to preserve them
+            ET.register_namespace('', 'http://www.w3.org/2000/svg')
+            ET.register_namespace('inkscape', 'http://www.inkscape.org/namespaces/inkscape')
+            ET.register_namespace('sodipodi', 'http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd')
+
+            root = ET.fromstring(svg_data)
+            inkscape_ns = '{http://www.inkscape.org/namespaces/inkscape}'
+
+            # Process each control
+            for control_id, is_modifier in controls:
+                # Determine which layer to search in
+                layer_name = 'modifiers' if is_modifier else 'controls'
+
+                # In modifiers layer, IDs are prefixed with "m_"
+                search_id = f"m_{control_id}" if is_modifier else control_id
+
+                # Find the layer
+                layer_elem = None
+                for elem in root.iter():
+                    if elem.get(f'{inkscape_ns}label') == layer_name:
+                        layer_elem = elem
+                        break
+
+                if layer_elem is None:
+                    logger.warning(f"Layer '{layer_name}' not found in SVG")
+                    continue
+
+                # Find the control element by ID within that layer
+                control_elem = None
+                for elem in layer_elem.iter():
+                    if elem.get('id') == search_id:
+                        control_elem = elem
+                        break
+
+                if control_elem is None:
+                    logger.warning(f"Control element '{search_id}' not found in layer '{layer_name}'")
+                    continue
+
+                # Change the control's style from hidden to visible
+                current_style = control_elem.get('style', '')
+
+                # Remove display:none or set display:inline
+                if 'display:none' in current_style:
+                    new_style = current_style.replace('display:none', 'display:inline')
+                    control_elem.set('style', new_style)
+                elif 'display' not in current_style:
+                    # No display property, add it
+                    control_elem.set('style', current_style + ';display:inline' if current_style else 'display:inline')
+                else:
+                    # Has display property but not none, just make sure it's inline
+                    control_elem.set('style', current_style.replace('display:inline', 'display:inline'))
+
+            # Convert back to bytes
+            return ET.tostring(root, encoding='utf-8')
+
+        except Exception as e:
+            logger.error(f"Failed to modify SVG: {e}")
+            return None
+
+    def _make_control_visible(self, svg_data: bytes, control_id: str, is_modifier: bool = False) -> bytes:
+        """Modify SVG to show only the specified control
+
+        Args:
+            svg_data: The raw SVG data
+            control_id: The control name (e.g., 'side', 'top')
+            is_modifier: If True, search in 'modifiers' layer; otherwise 'controls' layer
+        """
         try:
             # Register namespaces to preserve them
             ET.register_namespace('', 'http://www.w3.org/2000/svg')
@@ -134,11 +227,33 @@ class SVGControllerWidget(QWidget):
 
             root = ET.fromstring(svg_data)
 
-            # Find the control element by ID
-            control_elem = root.find(f".//*[@id='{control_id}']")
+            # Determine which layer to search in
+            layer_name = 'modifiers' if is_modifier else 'controls'
+
+            # In modifiers layer, IDs are prefixed with "m_"
+            search_id = f"m_{control_id}" if is_modifier else control_id
+
+            # Find the layer first
+            inkscape_ns = '{http://www.inkscape.org/namespaces/inkscape}'
+            layer_elem = None
+            for elem in root.iter():
+                if elem.get(f'{inkscape_ns}label') == layer_name:
+                    layer_elem = elem
+                    break
+
+            if layer_elem is None:
+                logger.warning(f"Layer '{layer_name}' not found in SVG")
+                return None
+
+            # Find the control element by ID within that layer
+            control_elem = None
+            for elem in layer_elem.iter():
+                if elem.get('id') == search_id:
+                    control_elem = elem
+                    break
 
             if control_elem is None:
-                logger.warning(f"Control element '{control_id}' not found in SVG")
+                logger.warning(f"Control element '{search_id}' not found in layer '{layer_name}'")
                 return None
 
             # Simply change the control's style from hidden to visible

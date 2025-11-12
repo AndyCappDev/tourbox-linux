@@ -17,7 +17,8 @@ from .controller_view import ControllerView
 from .driver_manager import DriverManager
 from .control_editor import ControlEditor
 from .config_writer import (save_profile, save_profile_metadata, create_new_profile,
-                            profile_exists_in_config, cleanup_old_backups)
+                            profile_exists_in_config, cleanup_old_backups,
+                            save_modifier_config, save_mapping_comments)
 
 # Import from existing driver code
 from tourboxelite.config_loader import load_profiles
@@ -31,7 +32,7 @@ class TourBoxConfigWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("TourBox Elite Configuration")
-        self.setMinimumSize(1000, 700)
+        self.setMinimumSize(1000, 940)  # Increased to ensure all controls including buttons are fully visible
         self.resize(1280, 1024)
 
         # Set window icon
@@ -40,6 +41,8 @@ class TourBoxConfigWindow(QMainWindow):
         # Track current profile and modifications
         self.current_profile = None
         self.modified_mappings = {}  # control_name -> action_string
+        self.modified_comments = {}  # control_name -> comment_string
+        self.modified_modifiers = {}  # control_name -> modifier_config
         self.is_modified = False
         self.profile_original_names = {}  # Track original names of profiles (for renames)
 
@@ -85,17 +88,20 @@ class TourBoxConfigWindow(QMainWindow):
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
 
-        # Top right: Controls list
+        # Top right: Controls list (8 rows initially)
         self.controls_list = ControlsList()
-        self.controls_list.setMinimumSize(400, 300)
+        self.controls_list.setMinimumSize(400, 270)  # Reduced to show ~8 rows initially
         self.controls_list.control_selected.connect(self._on_control_selected)
         right_layout.addWidget(self.controls_list, stretch=1)
 
-        # Bottom right: Control editor
+        # Bottom right: Control editor (with 4 row Modifier Combinations table)
         self.control_editor = ControlEditor()
-        self.control_editor.setMinimumSize(400, 200)
+        self.control_editor.setMinimumSize(400, 550)  # Increased to show 4 rows in Modifier Combinations
         self.control_editor.action_changed.connect(self._on_action_changed)
-        right_layout.addWidget(self.control_editor, stretch=0)
+        self.control_editor.comment_changed.connect(self._on_comment_changed)
+        self.control_editor.modifier_config_changed.connect(self._on_modifier_config_changed)
+        self.control_editor.combo_selected.connect(self._on_combo_selected)
+        right_layout.addWidget(self.control_editor, stretch=1)
 
         main_splitter.addWidget(right_widget)
 
@@ -275,6 +281,7 @@ class TourBoxConfigWindow(QMainWindow):
                 self.is_modified = False
 
                 # Reload the current profile to revert UI changes before switching
+                # This will automatically select the first control
                 self.controls_list.load_profile(self.current_profile)
                 # Also need to reload profile list to revert any name/window matching changes
                 from tourboxelite.config_loader import load_profiles
@@ -298,10 +305,8 @@ class TourBoxConfigWindow(QMainWindow):
         self.controller_view.clear_highlight()
 
         # Load profile's controls into controls list (loads from saved data)
+        # This will automatically select the first control, which will enable the editor
         self.controls_list.load_profile(profile)
-
-        # Disable control editor until a control is selected
-        self.control_editor.setEnabled(False)
 
     def _on_profiles_changed(self):
         """Handle profile metadata changes (name, window matching rules)"""
@@ -355,8 +360,13 @@ class TourBoxConfigWindow(QMainWindow):
         """
         logger.info(f"Control selected: {control_name}")
 
+        # Check if this control is a modifier
+        is_modifier = False
+        if self.current_profile and control_name in self.current_profile.modifier_buttons:
+            is_modifier = True
+
         # Highlight in controller view
-        self.controller_view.highlight_control(control_name)
+        self.controller_view.highlight_control(control_name, is_modifier)
 
         # Get current action from controls list table
         # Find the row for this control
@@ -369,8 +379,27 @@ class TourBoxConfigWindow(QMainWindow):
                     current_action = action_item.text()
                 break
 
+        # Get comment from profile
+        comment = ""
+        if self.current_profile:
+            comment = self.current_profile.mapping_comments.get(control_name, "")
+
+        # Get modifier combos if this is a physical button
+        modifier_combos = {}
+        if self.current_profile and control_name in self.current_profile.modifier_buttons:
+            # Get combos for this modifier
+            for (mod, ctrl), action_str in self.current_profile.modifier_mappings.items():
+                if mod == control_name:
+                    combo_comment = self.current_profile.modifier_combo_comments.get((mod, ctrl), "")
+                    modifier_combos[ctrl] = (action_str, combo_comment)
+
         # Load into editor
-        self.control_editor.load_control(control_name, current_action)
+        self.control_editor.load_control(
+            control_name,
+            current_action,
+            comment=comment,
+            modifier_combos=modifier_combos
+        )
 
         # Update status bar
         self.statusBar().showMessage(f"Editing: {control_name}")
@@ -406,6 +435,110 @@ class TourBoxConfigWindow(QMainWindow):
 
         self.statusBar().showMessage(f"Modified: {control_name} (not saved)")
 
+    def _on_comment_changed(self, control_name: str, comment: str):
+        """Handle comment change from editor
+
+        Args:
+            control_name: Name of the control
+            comment: New comment text
+        """
+        logger.info(f"Comment changed: {control_name}")
+
+        # Track the modification
+        self.modified_comments[control_name] = comment
+        self.is_modified = True
+        self._update_window_title()
+
+        # Enable Save button
+        self.save_action.setEnabled(True)
+
+        # Update the controls list display
+        for row in range(self.controls_list.table.rowCount()):
+            item = self.controls_list.table.item(row, 0)
+            if item and item.data(Qt.UserRole) == control_name:
+                comment_item = self.controls_list.table.item(row, 2)
+                if comment_item:
+                    comment_item.setText(comment)
+                break
+
+        self.statusBar().showMessage(f"Comment modified: {control_name} (not saved)")
+
+    def _on_modifier_config_changed(self, control_name: str, modifier_config: dict):
+        """Handle modifier configuration change from editor
+
+        Args:
+            control_name: Name of the modifier button
+            modifier_config: Modifier configuration dict with:
+                - is_modifier: bool
+                - base_action: str
+                - base_action_comment: str
+                - combos: dict of control_name -> (action, comment)
+        """
+        logger.info(f"Modifier config changed: {control_name}")
+
+        # Track the modification
+        self.modified_modifiers[control_name] = modifier_config
+        self.is_modified = True
+        self._update_window_title()
+
+        # Enable Save button
+        self.save_action.setEnabled(True)
+
+        # Update the controls list display to show modifier status
+        for row in range(self.controls_list.table.rowCount()):
+            item = self.controls_list.table.item(row, 0)
+            if item and item.data(Qt.UserRole) == control_name:
+                # Update the action column
+                action_item = self.controls_list.table.item(row, 1)
+                if action_item:
+                    if modifier_config.get('is_modifier'):
+                        # Show base action
+                        base_action = modifier_config.get('base_action', '')
+                        if base_action:
+                            readable_action = self._action_to_readable(base_action)
+                            action_item.setText(readable_action)
+                        else:
+                            action_item.setText("(no base action)")
+                    else:
+                        # Modifier was unchecked - show the regular action
+                        # First check modified_mappings, otherwise fall back to base_action from config
+                        if control_name in self.modified_mappings:
+                            readable_action = self._action_to_readable(self.modified_mappings[control_name])
+                            action_item.setText(readable_action)
+                        elif modifier_config.get('base_action'):
+                            # Use base_action as fallback when unchecking modifier
+                            readable_action = self._action_to_readable(modifier_config['base_action'])
+                            action_item.setText(readable_action)
+                        else:
+                            action_item.setText("(unmapped)")
+                break
+
+        if modifier_config.get('is_modifier'):
+            self.statusBar().showMessage(f"Modifier configured: {control_name} (not saved)")
+        else:
+            self.statusBar().showMessage(f"Modifier removed: {control_name} (not saved)")
+
+    def _on_combo_selected(self, combo_control: str):
+        """Handle combo selection from Modifier Combinations table
+
+        Args:
+            combo_control: Name of the control selected in the combo table
+        """
+        logger.info(f"Combo selected: {combo_control}")
+
+        # Get the current modifier control
+        modifier_control = self.control_editor.current_control
+        if not modifier_control:
+            return
+
+        # Check if current control is a modifier
+        is_modifier = False
+        if self.current_profile and modifier_control in self.current_profile.modifier_buttons:
+            is_modifier = True
+
+        # Highlight both the modifier and the combo control
+        self.controller_view.highlight_control(modifier_control, is_modifier, combo_control)
+
     def _update_window_title(self):
         """Update window title to show modified state"""
         title = "TourBox Elite Configuration"
@@ -427,6 +560,73 @@ class TourBoxConfigWindow(QMainWindow):
 
         logger.info(f"Saving profile: {self.current_profile.name}")
         logger.debug(f"Modified mappings: {self.modified_mappings}")
+        logger.debug(f"Modified comments: {self.modified_comments}")
+        logger.debug(f"Modified modifiers: {self.modified_modifiers}")
+
+        # Apply modifications to the profile object
+        # Apply comments
+        for control_name, comment in self.modified_comments.items():
+            if comment:
+                self.current_profile.mapping_comments[control_name] = comment
+            elif control_name in self.current_profile.mapping_comments:
+                del self.current_profile.mapping_comments[control_name]
+
+        # Apply modifier configurations
+        for control_name, modifier_config in self.modified_modifiers.items():
+            if modifier_config.get('is_modifier'):
+                # Add to modifier_buttons set
+                self.current_profile.modifier_buttons.add(control_name)
+
+                # Set base action
+                base_action = modifier_config.get('base_action', '').strip()
+                if base_action:
+                    self.current_profile.modifier_base_actions[control_name] = base_action
+                elif control_name in self.current_profile.modifier_base_actions:
+                    del self.current_profile.modifier_base_actions[control_name]
+
+                # Set base action comment
+                base_action_comment = modifier_config.get('base_action_comment', '').strip()
+                base_action_key = f"{control_name}.base_action"
+                if base_action_comment:
+                    self.current_profile.mapping_comments[base_action_key] = base_action_comment
+                elif base_action_key in self.current_profile.mapping_comments:
+                    del self.current_profile.mapping_comments[base_action_key]
+
+                # Set combos
+                # First, remove old combos for this modifier
+                old_combos = [(mod, ctrl) for (mod, ctrl) in self.current_profile.modifier_mappings.keys() if mod == control_name]
+                for combo_key in old_combos:
+                    del self.current_profile.modifier_mappings[combo_key]
+                    if combo_key in self.current_profile.modifier_combo_comments:
+                        del self.current_profile.modifier_combo_comments[combo_key]
+
+                # Add new combos
+                for ctrl, (action, combo_comment) in modifier_config.get('combos', {}).items():
+                    combo_key = (control_name, ctrl)
+                    self.current_profile.modifier_mappings[combo_key] = action
+                    if combo_comment:
+                        self.current_profile.modifier_combo_comments[combo_key] = combo_comment
+            else:
+                # is_modifier is False - remove modifier configuration
+                # Remove from modifier_buttons set
+                if control_name in self.current_profile.modifier_buttons:
+                    self.current_profile.modifier_buttons.discard(control_name)
+
+                # Remove base action
+                if control_name in self.current_profile.modifier_base_actions:
+                    del self.current_profile.modifier_base_actions[control_name]
+
+                # Remove base action comment
+                base_action_key = f"{control_name}.base_action"
+                if base_action_key in self.current_profile.mapping_comments:
+                    del self.current_profile.mapping_comments[base_action_key]
+
+                # Remove all combos for this modifier
+                old_combos = [(mod, ctrl) for (mod, ctrl) in self.current_profile.modifier_mappings.keys() if mod == control_name]
+                for combo_key in old_combos:
+                    del self.current_profile.modifier_mappings[combo_key]
+                    if combo_key in self.current_profile.modifier_combo_comments:
+                        del self.current_profile.modifier_combo_comments[combo_key]
 
         # Get the original name (before any renames) to check if profile exists
         original_name = self.profile_original_names.get(id(self.current_profile), self.current_profile.name)
@@ -468,16 +668,36 @@ class TourBoxConfigWindow(QMainWindow):
             if old_name:
                 self.profile_original_names[id(self.current_profile)] = self.current_profile.name
 
+            # Save modifier config FIRST (before regular mappings)
+            # This ensures modifiers are properly configured before writing regular mappings
+            modifiers_success = True
+            if self.modified_modifiers:
+                modifiers_success = save_modifier_config(self.current_profile)
+
             # Save the control mappings if any were modified
+            # Filter out buttons that are modifiers (they use base_action instead)
             mappings_success = True
             if self.modified_mappings:
-                mappings_success = save_profile(self.current_profile, self.modified_mappings)
+                # Remove any modifier buttons from mappings to avoid conflicts
+                filtered_mappings = {
+                    ctrl: action for ctrl, action in self.modified_mappings.items()
+                    if ctrl not in self.current_profile.modifier_buttons
+                }
+                if filtered_mappings:
+                    mappings_success = save_profile(self.current_profile, filtered_mappings)
 
-            success = metadata_success and mappings_success
+            # Save comments if any were modified
+            comments_success = True
+            if self.modified_comments:
+                comments_success = save_mapping_comments(self.current_profile)
+
+            success = metadata_success and mappings_success and comments_success and modifiers_success
 
         if success:
             # Clear modified state
             self.modified_mappings = {}
+            self.modified_comments = {}
+            self.modified_modifiers = {}
             self.is_modified = False
             self._update_window_title()
 
@@ -567,22 +787,23 @@ class TourBoxConfigWindow(QMainWindow):
                 original_part = part
                 key_name = part.replace("KEY_", "")
 
-                # Don't strip LEFT/RIGHT from arrow keys and navigation keys
-                if original_part not in ('KEY_LEFT', 'KEY_RIGHT', 'KEY_UP', 'KEY_DOWN'):
-                    # Clean up modifier names
-                    key_name = key_name.replace("LEFT", "").replace("RIGHT", "")
-
-                # Special cases
-                if key_name == "META":
-                    key_name = "Super"
-                # Check if it's a symbol key
-                elif key_name in SYMBOL_MAP:
+                # Check if it's a symbol key FIRST, before stripping LEFT/RIGHT
+                if key_name in SYMBOL_MAP:
                     key_name = SYMBOL_MAP[key_name]
                 else:
-                    # Replace underscores with spaces for readability
-                    key_name = key_name.replace('_', ' ')
-                    # Title case for regular keys
-                    key_name = key_name.title()
+                    # Don't strip LEFT/RIGHT from arrow keys and navigation keys
+                    if original_part not in ('KEY_LEFT', 'KEY_RIGHT', 'KEY_UP', 'KEY_DOWN'):
+                        # Clean up modifier names
+                        key_name = key_name.replace("LEFT", "").replace("RIGHT", "")
+
+                    # Special cases
+                    if key_name == "META":
+                        key_name = "Super"
+                    else:
+                        # Replace underscores with spaces for readability
+                        key_name = key_name.replace('_', ' ')
+                        # Title case for regular keys
+                        key_name = key_name.title()
                 readable_parts.append(key_name)
             else:
                 readable_parts.append(part)
@@ -652,6 +873,65 @@ class TourBoxConfigWindow(QMainWindow):
             )
 
             if reply == QMessageBox.Save:
+                # Apply all modifications to the profile object first
+                # Apply comments
+                for control_name, comment in self.modified_comments.items():
+                    if comment:
+                        self.current_profile.mapping_comments[control_name] = comment
+                    elif control_name in self.current_profile.mapping_comments:
+                        del self.current_profile.mapping_comments[control_name]
+
+                # Apply modifier configurations
+                for control_name, modifier_config in self.modified_modifiers.items():
+                    if modifier_config.get('is_modifier'):
+                        # Add to modifier_buttons set
+                        self.current_profile.modifier_buttons.add(control_name)
+
+                        # Set base action
+                        base_action = modifier_config.get('base_action', '').strip()
+                        if base_action:
+                            self.current_profile.modifier_base_actions[control_name] = base_action
+                        elif control_name in self.current_profile.modifier_base_actions:
+                            del self.current_profile.modifier_base_actions[control_name]
+
+                        # Set base action comment
+                        base_action_comment = modifier_config.get('base_action_comment', '').strip()
+                        base_action_key = f"{control_name}.base_action"
+                        if base_action_comment:
+                            self.current_profile.mapping_comments[base_action_key] = base_action_comment
+                        elif base_action_key in self.current_profile.mapping_comments:
+                            del self.current_profile.mapping_comments[base_action_key]
+
+                        # Set combos
+                        # First, remove old combos for this modifier
+                        old_combos = [(mod, ctrl) for (mod, ctrl) in self.current_profile.modifier_mappings.keys() if mod == control_name]
+                        for combo_key in old_combos:
+                            del self.current_profile.modifier_mappings[combo_key]
+                            if combo_key in self.current_profile.modifier_combo_comments:
+                                del self.current_profile.modifier_combo_comments[combo_key]
+
+                        # Add new combos
+                        for ctrl, (action, combo_comment) in modifier_config.get('combos', {}).items():
+                            combo_key = (control_name, ctrl)
+                            self.current_profile.modifier_mappings[combo_key] = action
+                            if combo_comment:
+                                self.current_profile.modifier_combo_comments[combo_key] = combo_comment
+                    else:
+                        # is_modifier is False - remove modifier configuration
+                        if control_name in self.current_profile.modifier_buttons:
+                            self.current_profile.modifier_buttons.discard(control_name)
+                        if control_name in self.current_profile.modifier_base_actions:
+                            del self.current_profile.modifier_base_actions[control_name]
+                        base_action_key = f"{control_name}.base_action"
+                        if base_action_key in self.current_profile.mapping_comments:
+                            del self.current_profile.mapping_comments[base_action_key]
+                        # Remove all combos for this modifier
+                        old_combos = [(mod, ctrl) for (mod, ctrl) in self.current_profile.modifier_mappings.keys() if mod == control_name]
+                        for combo_key in old_combos:
+                            del self.current_profile.modifier_mappings[combo_key]
+                            if combo_key in self.current_profile.modifier_combo_comments:
+                                del self.current_profile.modifier_combo_comments[combo_key]
+
                 # Save the changes (both profile metadata and control mappings)
                 from .config_writer import profile_exists_in_config
                 original_name = self.profile_original_names.get(id(self.current_profile), self.current_profile.name)
@@ -668,12 +948,28 @@ class TourBoxConfigWindow(QMainWindow):
                     # Save profile metadata (name, window matching)
                     metadata_success = save_profile_metadata(self.current_profile, old_name)
 
+                    # Save modifier config FIRST (before regular mappings)
+                    modifiers_success = True
+                    if self.modified_modifiers:
+                        modifiers_success = save_modifier_config(self.current_profile)
+
                     # Save control mappings
                     mappings_success = True
                     if self.modified_mappings:
-                        mappings_success = save_profile(self.current_profile, self.modified_mappings)
+                        # Remove any modifier buttons from mappings to avoid conflicts
+                        filtered_mappings = {
+                            ctrl: action for ctrl, action in self.modified_mappings.items()
+                            if ctrl not in self.current_profile.modifier_buttons
+                        }
+                        if filtered_mappings:
+                            mappings_success = save_profile(self.current_profile, filtered_mappings)
 
-                    success = metadata_success and mappings_success
+                    # Save comments if any were modified
+                    comments_success = True
+                    if self.modified_comments:
+                        comments_success = save_mapping_comments(self.current_profile)
+
+                    success = metadata_success and modifiers_success and mappings_success and comments_success
 
                 if not success:
                     reply2 = QMessageBox.critical(

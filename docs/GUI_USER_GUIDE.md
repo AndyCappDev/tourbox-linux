@@ -1,7 +1,7 @@
 # TourBox Elite Configuration GUI - User Guide
 
-**Version:** 1.0
-**Last Updated:** 2025-11-05
+**Version:** 1.1
+**Last Updated:** 2025-11-12
 
 ## Table of Contents
 
@@ -11,8 +11,9 @@
 4. [Basic Tasks](#basic-tasks)
 5. [Working with Profiles](#working-with-profiles)
 6. [Configuring Button Mappings](#configuring-button-mappings)
-7. [Tips & Tricks](#tips--tricks)
-8. [Troubleshooting](#troubleshooting)
+7. [Using Modifier Buttons](#using-modifier-buttons)
+8. [Tips & Tricks](#tips--tricks)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -21,6 +22,7 @@
 The TourBox Elite Configuration GUI is a graphical application that lets you configure your TourBox Elite controller without manually editing configuration files. With this tool, you can:
 
 - **Visually configure** all 20 controls (buttons, dials, scroll wheel, knob)
+- **Create over 250 unique key combinations per profile** using modifier buttons
 - **Create application-specific profiles** that automatically switch based on the active window
 - **Manage multiple profiles** with an intuitive interface
 - **Test configurations** without leaving the Configuration GUI
@@ -67,7 +69,7 @@ tourbox-gui
 
 ## Understanding the Interface
 
-![TourBox Elite Configuration GUI](images/gui-screenshot.png)
+![TourBox Elite Configuration GUI](images/gui-screenshot.png?v=2.0.0)
 
 The GUI has a 4-panel layout:
 
@@ -383,6 +385,209 @@ The control does nothing when pressed.
 
 ---
 
+## Using Modifier Buttons
+
+### What Are Modifier Buttons?
+
+**Modifier buttons** are a powerful feature that allows you to create **over 250 unique key combinations per profile** using your TourBox Elite's physical buttons. When a button acts as a modifier, it can be combined with any other control to trigger different actions.
+
+**Example Workflow:**
+- `Side` button alone → Send Super key (open application menu)
+- `Side + Top` button → Send Ctrl+C (copy)
+- `Side + Tall` button → Send Ctrl+V (paste)
+- `Side + Short` button → Send Ctrl+Z (undo)
+- `Side + C1` button → Send Ctrl+Shift+Z (redo)
+- ... and so on!
+
+This gives you multiple "layers" of functionality from the same physical buttons, similar to how Shift, Ctrl, and Alt keys work on your keyboard.
+
+### Which Buttons Can Be Modifiers?
+
+The **14 physical buttons** that can act as modifiers:
+
+**Main Buttons (7):**
+- side, top, tall, short, c1, c2, tour
+
+**D-Pad Buttons (4):**
+- dpad_up, dpad_down, dpad_left, dpad_right
+
+**Click Buttons (3):**
+- scroll_click, knob_click, dial_click
+
+**Note:** Only the **rotational movements** cannot be modifiers:
+- scroll_up/scroll_down (scroll wheel rotation)
+- knob_cw/knob_ccw (knob rotation)
+- dial_cw/dial_ccw (dial rotation)
+
+However, the **click actions** (scroll_click, knob_click, dial_click) **can** be modifiers and can also be combined with other modifiers.
+
+### Configuring a Modifier Button
+
+**Example:** Make the "side" button a modifier
+
+1. **Select the profile** you want to edit (e.g., "default")
+2. **Click the "side" button** in the Controls Configuration table
+3. In the Control Editor:
+   - Configure the **base action** (what happens when pressed alone):
+     - Select **"Keyboard"** as the action type
+     - Check the **"Super"** modifier
+     - Leave the key field empty (modifier-only action)
+   - Click **"Apply"** to save the base action
+4. You can now add combinations (see next section)
+
+**Important:** A button becomes a modifier **automatically** when it has at least one modifier combination defined. There's no checkbox to enable/disable modifier mode - it's determined by whether combinations exist.
+
+### Adding Modifier Combinations
+
+**Example:** Add "Side + Top = Ctrl+C" combination
+
+1. **Ensure the modifier button is selected** (e.g., "side")
+2. In the **Modifier Combinations** section (bottom of Control Editor):
+   - Click **"Add Combination"**
+3. In the dialog that appears:
+   - **Control:** Select "top" from the dropdown
+   - **Action Type:** Select "Keyboard"
+   - **Modifiers:** Check "Ctrl"
+   - **Key:** Type "c"
+   - **Comment:** (Optional) Type "Copy"
+   - Click **"OK"**
+4. The combination appears in the Modifier Combinations table
+5. Click **"Apply"** to apply changes
+6. Click **"Save"** (Ctrl+S) to write to config file (You must save any changes to make them permanent and to test your mappings)
+
+**Result:** Now when you hold the "side" button and press "top", it sends Ctrl+C!
+
+### Editing and Deleting Combinations
+
+**To edit a combination:**
+1. Select the modifier button in Controls Configuration
+2. In the Modifier Combinations table, click the combination row
+3. Click the **"Edit"** button in the rightmost column
+4. Make changes in the dialog
+5. Click **"OK"**, then **"Apply"**, then **"Save"**
+
+**To delete a combination:**
+1. Select the modifier button in Controls Configuration
+2. In the Modifier Combinations table, click the combination row
+3. Click the **"Delete"** button in the rightmost column
+4. Confirm deletion
+5. Click **"Apply"**, then **"Save"**
+
+### How Modifier Buttons Work
+
+**Press behavior:**
+- **Hold modifier + press another control** → Sends the combination action
+- **Press and release modifier alone** → Sends the base action
+
+**Visual feedback:**
+- When a modifier button is selected, you'll see its **base action** in the "Current Action" column
+- The **Modifier Combinations** section shows all defined combinations for that button
+- When you click a combination in the table, both the modifier button **and** the combination control are highlighted in the controller view
+
+### Common Modifier Patterns
+
+**Text Editing (Side as modifier):**
+- `side + tall` → Ctrl+C (copy)
+- `side + short` → Ctrl+V (paste)
+- `side + c1` → Ctrl+Z (undo)
+- `side + c2` → Ctrl+Shift+Z (redo)
+- `side + tour` → Ctrl+A (select all)
+- `side` alone → Super (application menu)
+
+**Navigation (Top as modifier):**
+- `top + dpad_up` → Page Up
+- `top + dpad_down` → Page Down
+- `top + dpad_left` → Home
+- `top + dpad_right` → End
+- `top + scroll_up` → Ctrl+Home (document start)
+- `top + scroll_down` → Ctrl+End (document end)
+- `top` alone → Shift
+
+**Application-Specific (Tall as modifier for GIMP/Photoshop):**
+- `tall + knob_cw` → Increase brush size
+- `tall + knob_ccw` → Decrease brush size
+- `tall + c1` → Switch to brush tool
+- `tall + c2` → Switch to eraser tool
+- `tall + tour` → Reset tool options
+- `tall` alone → Alt
+
+### Tips for Using Modifiers
+
+**1. Keep Base Actions Useful**
+- Don't set the base action to "None" - you'll lose functionality when pressing the button alone
+- Good base actions: Super, Shift, Alt, Ctrl (modifier keys)
+- These are useful both alone and in combinations
+
+**2. Organize by Function**
+- Group related combinations under one modifier button
+- Example: All text editing under "side", all navigation under "top"
+
+**3. Start Simple**
+- Begin with 3-4 combinations per modifier
+- Add more as you memorize them
+- Too many combinations can be overwhelming
+
+**4. Use Comments**
+- Add descriptive comments to combinations
+- Helps you remember what each combination does
+- Especially useful for complex shortcuts
+
+**5. Profile-Specific Modifiers**
+- Different profiles can have different modifier combinations
+- Example: "side + c1" = Ctrl+Z in default, but "Undo Brush Stroke" in GIMP profile
+- The same physical buttons can do completely different things per application
+
+### Example: Complete Modifier Setup
+
+Here's a complete example showing how to set up a modifier-heavy workflow:
+
+**Side Button (Modifier):**
+- Base action: Super
+- Combinations:
+  - side + top → Ctrl+C (copy)
+  - side + tall → Ctrl+V (paste)
+  - side + short → Ctrl+X (cut)
+  - side + c1 → Ctrl+Z (undo)
+  - side + c2 → Ctrl+Shift+Z (redo)
+  - side + tour → Ctrl+A (select all)
+  - side + dpad_up → Ctrl+Home
+  - side + dpad_down → Ctrl+End
+  - side + knob_cw → Ctrl+= (zoom in)
+  - side + knob_ccw → Ctrl+- (zoom out)
+
+**Top Button (Regular):**
+- Action: Shift (no combinations)
+
+**Result:** You've created 10 additional shortcuts from just the "side" button, while keeping "top" as a simple Shift key!
+
+### Troubleshooting Modifiers
+
+**Problem:** Combination doesn't trigger
+
+**Solutions:**
+1. Verify the combination exists in the Modifier Combinations table
+2. Check that you're holding the modifier button while pressing the other control
+3. Ensure you clicked "Apply" and "Save" after adding the combination
+4. Check driver logs: `journalctl --user -u tourbox -f`
+5. Restart the driver: `systemctl --user restart tourbox`
+
+**Problem:** Base action doesn't work when pressed alone
+
+**Solutions:**
+1. Verify the base action is configured (check "Current Action" column)
+2. Make sure you're **not** holding the modifier button too long
+3. Release the modifier button cleanly without pressing other controls
+
+**Problem:** Too many combinations to remember
+
+**Solutions:**
+1. Use the comment field to document what each combination does
+2. Print a reference card with your most-used combinations
+3. Start with fewer combinations and add more gradually
+4. Group related functions under the same modifier
+
+---
+
 ## Tips & Tricks
 
 ### Keyboard Navigation
@@ -397,7 +602,7 @@ Speed up your workflow with keyboard shortcuts:
 
 **Quick iteration:**
 1. Keep the GUI open during setup
-2. Save changes to automatically apply them
+2. Apply and Save changes
 3. Switch to your application to test
 4. Switch back to GUI → tweak → save → test again
 5. No need to close the GUI or restart anything
@@ -440,7 +645,8 @@ Speed up your workflow with keyboard shortcuts:
 
 ### Visual Feedback
 
-- **Yellow highlight** on controller view shows selected control
+- **Yellow highlight** on controller view shows selected control that has no modifiers or the modifier itself
+- **Turquoise highlight** on controller view shows the control that is the base controll (has modifiers defined for it)
 - **Asterisk (*)** in window title means unsaved changes
 - **"(unmapped)"** in controls list means no action assigned
 - **Status bar** shows what's happening

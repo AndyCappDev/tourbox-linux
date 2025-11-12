@@ -206,6 +206,15 @@ def save_profile(profile: Profile, modifications: Dict[str, str]) -> bool:
                 logger.debug(f"Added new control: {control_name} = {action_str}")
                 section_end += 1  # Adjust section end since we inserted a line
 
+        # Ensure there's a blank line before next section
+        if section_end < len(lines):
+            next_line = lines[section_end].strip()
+            if next_line.startswith('[') and next_line.endswith(']'):
+                # Next line is a section header - ensure blank line before it
+                if section_end > 0 and lines[section_end - 1].strip() != '':
+                    lines.insert(section_end, "\n")
+                    section_end += 1
+
         # Write to temporary file first (atomic write)
         temp_path = f"{config_path}.tmp"
         with open(temp_path, 'w') as f:
@@ -226,6 +235,265 @@ def save_profile(profile: Profile, modifications: Dict[str, str]) -> bool:
                 logger.info("Restored config from backup after error")
             except Exception as restore_error:
                 logger.error(f"Failed to restore backup: {restore_error}")
+        return False
+
+
+def save_modifier_config(profile: Profile) -> bool:
+    """Save modifier button configurations to config file
+
+    Args:
+        profile: Profile object with modifier configuration
+
+    Returns:
+        True if save succeeded, False otherwise
+    """
+    config_path = get_config_path()
+
+    if not config_path:
+        logger.error("No config file found")
+        return False
+
+    try:
+        # Create backup first
+        backup_path = f"{config_path}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        shutil.copy2(config_path, backup_path)
+        logger.info(f"Created backup: {backup_path}")
+
+        # Read file as lines to preserve comments and formatting
+        with open(config_path, 'r') as f:
+            lines = f.readlines()
+
+        # Find the profile section
+        section_name = f"[profile:{profile.name}]"
+        section_start = -1
+        section_end = -1
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped == section_name:
+                section_start = i
+            elif section_start >= 0 and stripped.startswith('[') and stripped.endswith(']'):
+                section_end = i
+                break
+
+        if section_start < 0:
+            logger.error(f"Profile section {section_name} not found in config")
+            return False
+
+        if section_end < 0:
+            section_end = len(lines)
+
+        # First pass: Remove old modifier declarations, base actions, combos,
+        # and regular mappings for buttons that are now modifiers
+        i = section_start + 1
+        while i < section_end:
+            line = lines[i]
+            stripped = line.strip()
+
+            # Skip empty lines and comments
+            if not stripped or stripped.startswith('#'):
+                i += 1
+                continue
+
+            if '=' in line:
+                key = line.split('=')[0].strip()
+                value = line.split('=', 1)[1].strip()
+
+                # Remove old modifier declarations
+                if value == 'modifier':
+                    del lines[i]
+                    section_end -= 1
+                    continue
+
+                # Remove old base actions and combos (anything with a dot that's not a comment)
+                if '.' in key and not key.endswith('.comment'):
+                    del lines[i]
+                    section_end -= 1
+                    continue
+
+                # Remove regular mappings for buttons that are now modifiers
+                # (they'll use base_action instead)
+                if key in profile.modifier_buttons and '.' not in key:
+                    del lines[i]
+                    section_end -= 1
+                    continue
+
+            i += 1
+
+        # Clean up multiple consecutive blank lines within the section
+        i = section_start + 1
+        while i < section_end:
+            # If this line and the previous line are both blank, remove this one
+            if i > section_start + 1 and lines[i].strip() == '' and lines[i - 1].strip() == '':
+                del lines[i]
+                section_end -= 1
+            else:
+                i += 1
+
+        # Second pass: Add new modifier configuration
+        # Find insertion point (after regular mappings, before next section)
+        insert_pos = section_end
+
+        # Add blank line before modifier section if we have modifiers and one doesn't already exist
+        if profile.modifier_buttons or profile.modifier_base_actions or profile.modifier_mappings:
+            # Check if there's already a blank line before insert_pos
+            if insert_pos > 0 and lines[insert_pos - 1].strip() != '':
+                lines.insert(insert_pos, "\n")
+                insert_pos += 1
+                section_end += 1
+
+        # Add modifier declarations
+        for modifier_name in sorted(profile.modifier_buttons):
+            lines.insert(insert_pos, f"{modifier_name} = modifier\n")
+            logger.debug(f"Added modifier declaration: {modifier_name}")
+            insert_pos += 1
+            section_end += 1
+
+        # Add base actions
+        for modifier_name in sorted(profile.modifier_base_actions.keys()):
+            action_str = profile.modifier_base_actions[modifier_name]
+            lines.insert(insert_pos, f"{modifier_name}.base_action = {action_str}\n")
+            logger.debug(f"Added base action: {modifier_name}.base_action = {action_str}")
+            insert_pos += 1
+            section_end += 1
+
+        # Add combos (maintain insertion order - don't sort)
+        for (modifier_name, control_name), action_str in profile.modifier_mappings.items():
+            lines.insert(insert_pos, f"{modifier_name}.{control_name} = {action_str}\n")
+            logger.debug(f"Added combo: {modifier_name}.{control_name} = {action_str}")
+            insert_pos += 1
+            section_end += 1
+
+        # Ensure there's a blank line after modifier section before next section
+        # Check if section_end points to a section header (another profile)
+        if section_end < len(lines):
+            next_line = lines[section_end].strip()
+            if next_line.startswith('[') and next_line.endswith(']'):
+                # Next line is a section header - check if we need a blank line before it
+                # Only add if the previous line is not already blank
+                if section_end > 0 and lines[section_end - 1].strip() != '':
+                    lines.insert(section_end, "\n")
+                    section_end += 1
+
+        # Write to temporary file first (atomic write)
+        temp_path = f"{config_path}.tmp"
+        with open(temp_path, 'w') as f:
+            f.writelines(lines)
+
+        # Rename temp file to actual config (atomic on POSIX systems)
+        os.replace(temp_path, config_path)
+
+        logger.info(f"Successfully saved modifier config for profile: {profile.name}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error saving modifier config: {e}", exc_info=True)
+        return False
+
+
+def save_mapping_comments(profile: Profile) -> bool:
+    """Save comments for all mappings to config file
+
+    Handles multiline comments by converting newlines to \\n escape sequences
+
+    Args:
+        profile: Profile object with comment configuration
+
+    Returns:
+        True if save succeeded, False otherwise
+    """
+    config_path = get_config_path()
+
+    if not config_path:
+        logger.error("No config file found")
+        return False
+
+    try:
+        # Create backup first
+        backup_path = f"{config_path}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        shutil.copy2(config_path, backup_path)
+        logger.info(f"Created backup: {backup_path}")
+
+        # Read file as lines to preserve comments and formatting
+        with open(config_path, 'r') as f:
+            lines = f.readlines()
+
+        # Find the profile section
+        section_name = f"[profile:{profile.name}]"
+        section_start = -1
+        section_end = -1
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped == section_name:
+                section_start = i
+            elif section_start >= 0 and stripped.startswith('[') and stripped.endswith(']'):
+                section_end = i
+                break
+
+        if section_start < 0:
+            logger.error(f"Profile section {section_name} not found in config")
+            return False
+
+        if section_end < 0:
+            section_end = len(lines)
+
+        # First pass: Remove all old .comment lines
+        i = section_start + 1
+        while i < section_end:
+            line = lines[i]
+            if '=' in line:
+                key = line.split('=')[0].strip()
+                if key.endswith('.comment'):
+                    del lines[i]
+                    section_end -= 1
+                    continue
+            i += 1
+
+        # Second pass: Add new comments
+        insert_pos = section_end
+
+        # Add regular mapping comments
+        for control_name in sorted(profile.mapping_comments.keys()):
+            comment_text = profile.mapping_comments[control_name]
+            # Convert newlines to \n escape sequences for storage
+            comment_text_escaped = comment_text.replace('\n', '\\n')
+            lines.insert(insert_pos, f"{control_name}.comment = {comment_text_escaped}\n")
+            logger.debug(f"Added comment: {control_name}.comment")
+            insert_pos += 1
+            section_end += 1
+
+        # Add modifier combo comments (maintain insertion order - don't sort)
+        for (modifier_name, control_name), comment_text in profile.modifier_combo_comments.items():
+            # Convert newlines to \n escape sequences for storage
+            comment_text_escaped = comment_text.replace('\n', '\\n')
+            lines.insert(insert_pos, f"{modifier_name}.{control_name}.comment = {comment_text_escaped}\n")
+            logger.debug(f"Added combo comment: {modifier_name}.{control_name}.comment")
+            insert_pos += 1
+            section_end += 1
+
+        # Ensure there's a blank line before next section
+        if section_end < len(lines):
+            next_line = lines[section_end].strip()
+            if next_line.startswith('[') and next_line.endswith(']'):
+                # Next line is a section header - ensure blank line before it
+                if section_end > 0 and lines[section_end - 1].strip() != '':
+                    lines.insert(section_end, "\n")
+                    section_end += 1
+
+        # Write to temporary file first (atomic write)
+        temp_path = f"{config_path}.tmp"
+        with open(temp_path, 'w') as f:
+            f.writelines(lines)
+
+        # Rename temp file to actual config (atomic on POSIX systems)
+        os.replace(temp_path, config_path)
+
+        logger.info(f"Successfully saved comments for profile: {profile.name}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error saving comments: {e}", exc_info=True)
         return False
 
 

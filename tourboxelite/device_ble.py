@@ -13,7 +13,7 @@ from typing import Optional
 
 from bleak import BleakClient
 from evdev import UInput, ecodes as e
-from .config_loader import load_config, load_device_config, load_profiles
+from .config_loader import load_config, load_device_config, load_profiles, BUTTON_CODES, parse_action
 from .window_monitor import WaylandWindowMonitor
 
 logger = logging.getLogger(__name__)
@@ -76,24 +76,191 @@ class TourBoxBLE:
         self.disconnected = False
         self.reconnect_delay = 5.0  # Initial reconnection delay in seconds
 
+        # Modifier state tracking
+        self.modifier_buttons = set()              # Set of button names that are modifiers
+        self.active_modifiers = set()              # Currently pressed modifier buttons
+        self.modifier_mappings = {}                # (modifier, control) -> action events
+        self.modifier_base_actions = {}            # modifier -> base action events
+        self.base_action_active = set()            # Modifiers with base action currently pressed
+        self.combo_used = set()                    # Modifiers that had a combo used while held
+
     def disconnection_handler(self, client):
         """Handle disconnection from TourBox Elite"""
         self.disconnected = True
+        # Clear modifier state on disconnect to prevent stuck modifiers
+        self.active_modifiers.clear()
+        self.base_action_active.clear()
+        self.combo_used.clear()
         logger.warning("TourBox Elite disconnected")
         print("\n⚠️  TourBox Elite disconnected - waiting for reconnection...")
+
+    def is_modifier_button(self, control_name: str) -> bool:
+        """Check if a control is configured as a modifier button
+
+        Args:
+            control_name: Name of the control (e.g., 'tall', 'short')
+
+        Returns:
+            True if the control is a modifier button, False otherwise
+        """
+        return control_name in self.modifier_buttons
+
+    def get_control_name_from_code(self, data_bytes: bytes) -> Optional[tuple]:
+        """Get control name and press/release state from button code
+
+        Args:
+            data_bytes: Raw button data from device
+
+        Returns:
+            Tuple of (control_name, is_press) or None if not found
+        """
+        for control_name, codes in BUTTON_CODES.items():
+            if len(codes) >= 2:
+                press_code, release_code = codes[0], codes[1]
+                if data_bytes == bytes([press_code]):
+                    return (control_name, True)
+                elif data_bytes == bytes([release_code]):
+                    return (control_name, False)
+        return None
+
+    def get_modified_action(self, control_name: str) -> Optional[list]:
+        """Get modified action if a modifier is currently active
+
+        Args:
+            control_name: Name of the control being actuated
+
+        Returns:
+            List of action events if a modifier combo exists, None otherwise
+        """
+        # Check if any modifier is active
+        if not self.active_modifiers:
+            return None
+
+        # For now, we only support single modifiers (not multiple simultaneous)
+        # Take the first (and only) active modifier
+        if len(self.active_modifiers) == 1:
+            modifier_name = next(iter(self.active_modifiers))
+
+            # Check if there's a combo mapping for this modifier + control
+            combo_key = (modifier_name, control_name)
+            if combo_key in self.modifier_mappings:
+                return self.modifier_mappings[combo_key]
+
+        return None
 
     def notification_handler(self, sender, data: bytearray):
         """Handle button/dial notifications from TourBox Elite
 
         Each notification is a single byte containing button press/release
         or dial rotation data. Maps to Linux input events via MAPPING dict.
+
+        Implements modifier button logic:
+        - Tracks modifier button state (pressed/released)
+        - Executes modifier base actions if configured
+        - Routes to combo actions when modifier is held
         """
         self.button_count += 1
 
         # Convert bytearray to bytes for dict lookup
         data_bytes = bytes(data)
 
-        # Debug output
+        # Step 1: Identify control name and press/release state
+        control_info = self.get_control_name_from_code(data_bytes)
+
+        # Step 2: Check if this is a modifier button event
+        if control_info:
+            control_name, is_press = control_info
+
+            if self.is_modifier_button(control_name):
+                # This is a modifier button - update state
+                if is_press:
+                    self.active_modifiers.add(control_name)
+                    logger.info(f"🔘 Modifier {control_name} PRESSED, active: {self.active_modifiers}")
+
+                    # Execute base action press if configured
+                    if control_name in self.modifier_base_actions:
+                        events = self.modifier_base_actions[control_name]
+                        # Send press events only
+                        for event_type, event_code, value in events:
+                            if value == 1:  # Press events
+                                self.controller.write(event_type, event_code, value)
+                        self.controller.syn()
+                        self.base_action_active.add(control_name)
+                        logger.info(f"🔘 Modifier {control_name} base action PRESSED")
+                    else:
+                        logger.info(f"🔘 Modifier {control_name} - no base action, tracking state only")
+                else:
+                    # Modifier released
+                    self.active_modifiers.discard(control_name)
+                    logger.info(f"🔘 Modifier {control_name} RELEASED, active: {self.active_modifiers}")
+
+                    # Release base action if it's still active (wasn't cancelled by combo)
+                    if control_name in self.base_action_active:
+                        events = self.modifier_base_actions[control_name]
+                        # Send release events
+                        for event_type, event_code, value in events:
+                            if value == 1:  # Was a press event, send release
+                                self.controller.write(event_type, event_code, 0)
+                        self.controller.syn()
+                        self.base_action_active.discard(control_name)
+                        logger.info(f"🔘 Modifier {control_name} base action RELEASED")
+
+                    # Reset combo usage tracking
+                    self.combo_used.discard(control_name)
+                return
+
+        # Step 3: Check for modified action (combo)
+        if control_info:
+            control_name, is_press = control_info
+            modified_action = self.get_modified_action(control_name)
+
+            if modified_action:
+                # Execute combo action instead of normal action
+                modifier_name = next(iter(self.active_modifiers))
+
+                if is_press:
+                    # Combo button pressed - cancel base action if active
+                    if modifier_name in self.base_action_active:
+                        # Release the base action first
+                        base_events = self.modifier_base_actions[modifier_name]
+                        for event_type, event_code, value in base_events:
+                            if value == 1:  # Was a press, send release
+                                self.controller.write(event_type, event_code, 0)
+                        self.controller.syn()
+                        self.base_action_active.discard(modifier_name)
+                        logger.info(f"🔘 Cancelled base action for {modifier_name} (combo triggered)")
+
+                    # Mark that combo was used
+                    self.combo_used.add(modifier_name)
+
+                    # Send combo press
+                    events_to_send = modified_action
+                else:
+                    # Combo button released - send combo release
+                    events_to_send = []
+                    for event_type, event_code, value in modified_action:
+                        if event_type == e.EV_KEY and value == 1:
+                            # Convert press to release
+                            events_to_send.append((event_type, event_code, 0))
+                        else:
+                            # Keep other events as-is
+                            events_to_send.append((event_type, event_code, value))
+
+                # Log the actual events being sent
+                event_desc = []
+                for event_type, event_code, value in events_to_send:
+                    if event_type == e.EV_KEY:
+                        key_name = next((k for k, v in e.__dict__.items() if k.startswith('KEY_') and v == event_code), f"KEY_{event_code}")
+                        action = "PRESS" if value == 1 else "RELEASE" if value == 0 else f"VAL={value}"
+                        event_desc.append(f"{key_name}:{action}")
+                logger.info(f"🔘 Combo: {modifier_name}.{control_name} -> {', '.join(event_desc)}")
+
+                for event in events_to_send:
+                    self.controller.write(*event)
+                self.controller.syn()
+                return
+
+        # Step 4: Execute normal action (no modifier or no combo mapping)
         if data_bytes:
             mapping = self.mapping.get(data_bytes, [])
             if mapping:
@@ -108,13 +275,13 @@ class TourBoxBLE:
                         rel_name = next((k for k, v in e.__dict__.items() if k.startswith('REL_') and v == event_code), f"REL_{event_code}")
                         event_desc.append(f"{rel_name}:{value}")
                 logger.info(f"🔘 {data_bytes.hex()} -> {', '.join(event_desc)}")
+
+                # Send input events to virtual device
+                for event in mapping:
+                    self.controller.write(*event)
+                self.controller.syn()
             else:
                 logger.warning(f"Unknown button code: {data_bytes.hex()}")
-
-        # Send input events to virtual device
-        for event in self.mapping.get(data_bytes, []):
-            self.controller.write(*event)
-        self.controller.syn()
 
     async def unlock_device(self):
         """Send unlock sequence to TourBox Elite
@@ -149,9 +316,44 @@ class TourBoxBLE:
         self.current_profile = profile
         self.mapping = profile.mapping
 
+        # Load modifier configuration
+        self.modifier_buttons = profile.modifier_buttons
+        self.active_modifiers.clear()  # Clear modifier state when switching
+        self.base_action_active.clear()  # Clear base action state
+        self.combo_used.clear()  # Clear combo usage tracking
+
+        # Convert modifier mappings from action strings to events
+        self.modifier_mappings = {}
+        logger.info(f"Converting {len(profile.modifier_mappings)} modifier mappings from strings to events")
+        for (modifier, control), action_str in profile.modifier_mappings.items():
+            events = parse_action(action_str)
+            logger.info(f"  Parsing combo {modifier}.{control} = '{action_str}' -> {events}")
+            # For rotary controls, add press+release cycle
+            if control in ('scroll_up', 'scroll_down', 'knob_cw', 'knob_ccw', 'dial_cw', 'dial_ccw'):
+                # Create release events
+                release_events = []
+                for event_type, event_code, value in events:
+                    if event_type == e.EV_KEY:
+                        release_events.append((event_type, event_code, 0))
+                self.modifier_mappings[(modifier, control)] = events + release_events
+            else:
+                self.modifier_mappings[(modifier, control)] = events
+            # Log the final stored events with key names
+            for event_type, event_code, value in self.modifier_mappings[(modifier, control)]:
+                if event_type == e.EV_KEY:
+                    key_name = next((k for k, v in e.__dict__.items() if k.startswith('KEY_') and v == event_code), f"KEY_{event_code}")
+                    logger.info(f"  Event: {key_name} (code={event_code}) value={value}")
+
+        # Convert base actions from action strings to events
+        self.modifier_base_actions = {}
+        for modifier, action_str in profile.modifier_base_actions.items():
+            self.modifier_base_actions[modifier] = parse_action(action_str)
+
         # Print profile switch to console
         print(f"\n🎮 Switched to profile: {profile.name}")
         logger.info(f"Switched to profile: {profile.name}")
+        if self.modifier_buttons:
+            logger.info(f"  Modifiers active: {', '.join(self.modifier_buttons)}")
 
         # Check if capabilities changed
         if profile.capabilities != self.capabilities:
@@ -208,6 +410,29 @@ class TourBoxBLE:
             self.current_profile = new_current_profile
             self.mapping = new_current_profile.mapping
 
+            # Reload modifier configuration
+            self.modifier_buttons = new_current_profile.modifier_buttons
+            self.active_modifiers.clear()  # Clear modifier state on reload
+
+            # Convert modifier mappings from action strings to events
+            self.modifier_mappings = {}
+            for (modifier, control), action_str in new_current_profile.modifier_mappings.items():
+                events = parse_action(action_str)
+                # For rotary controls, add press+release cycle
+                if control in ('scroll_up', 'scroll_down', 'knob_cw', 'knob_ccw', 'dial_cw', 'dial_ccw'):
+                    release_events = []
+                    for event_type, event_code, value in events:
+                        if event_type == e.EV_KEY:
+                            release_events.append((event_type, event_code, 0))
+                    self.modifier_mappings[(modifier, control)] = events + release_events
+                else:
+                    self.modifier_mappings[(modifier, control)] = events
+
+            # Convert base actions from action strings to events
+            self.modifier_base_actions = {}
+            for modifier, action_str in new_current_profile.modifier_base_actions.items():
+                self.modifier_base_actions[modifier] = parse_action(action_str)
+
             # Check if capabilities changed
             if new_current_profile.capabilities != self.capabilities:
                 logger.info("Capabilities changed - recreating virtual input device")
@@ -227,6 +452,8 @@ class TourBoxBLE:
                 logger.debug(f"Virtual input device recreated: {self.controller.device.path}")
 
             print(f"✅ Configuration reloaded successfully - using profile: {self.current_profile.name}")
+            if self.modifier_buttons:
+                print(f"   Modifiers active: {', '.join(self.modifier_buttons)}")
             logger.info(f"Configuration reload complete - active profile: {self.current_profile.name}")
 
         except Exception as e:

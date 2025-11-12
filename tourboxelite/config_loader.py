@@ -11,8 +11,8 @@ import os
 import configparser
 import logging
 import re
-from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass
+from typing import Dict, List, Tuple, Optional, Set
+from dataclasses import dataclass, field
 from evdev import ecodes as e
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,15 @@ class Profile:
     app_id: Optional[str] = None
     mapping: Optional[Dict] = None
     capabilities: Optional[Dict] = None
+
+    # NEW FIELDS FOR MODIFIERS
+    modifier_buttons: Set[str] = field(default_factory=set)  # e.g., {'tall', 'short'}
+    modifier_mappings: Dict[Tuple[str, str], str] = field(default_factory=dict)  # (modifier, control) -> action
+    modifier_base_actions: Dict[str, str] = field(default_factory=dict)  # modifier -> base_action (optional)
+
+    # NEW FIELDS FOR COMMENTS
+    mapping_comments: Dict[str, str] = field(default_factory=dict)  # control -> comment
+    modifier_combo_comments: Dict[Tuple[str, str], str] = field(default_factory=dict)  # (modifier, control) -> comment
 
     def matches(self, window_info) -> bool:
         """Check if this profile matches the given window info"""
@@ -297,6 +306,10 @@ def parse_profile_mappings(config: configparser.ConfigParser, section_name: str)
         if key in ('window_class', 'window_title', 'app_id'):
             continue
 
+        # Skip modifier declarations and combo mappings
+        if action.strip() == 'modifier' or '.' in key:
+            continue
+
         # Check if it's a button
         if key in BUTTON_CODES:
             codes = BUTTON_CODES[key]
@@ -365,17 +378,62 @@ def load_profiles(config_path: str = None) -> List[Profile]:
             # Parse mappings
             mapping, caps = parse_profile_mappings(config, section)
 
+            # Parse modifier configurations
+            modifier_buttons, modifier_mappings, modifier_base_actions = parse_modifier_mappings(config, section)
+
+            # Parse comments
+            mapping_comments, modifier_combo_comments = parse_mapping_comments(config, section)
+
+            # Add modifier combo actions to capabilities
+            for action_str in modifier_mappings.values():
+                events = parse_action(action_str)
+                for event_type, event_code, value in events:
+                    if event_type == e.EV_KEY:
+                        if e.EV_KEY not in caps:
+                            caps[e.EV_KEY] = []
+                        if event_code not in caps[e.EV_KEY]:
+                            caps[e.EV_KEY].append(event_code)
+                    elif event_type == e.EV_REL:
+                        if e.EV_REL not in caps:
+                            caps[e.EV_REL] = []
+                        if event_code not in caps[e.EV_REL]:
+                            caps[e.EV_REL].append(event_code)
+
+            # Add modifier base actions to capabilities
+            for action_str in modifier_base_actions.values():
+                events = parse_action(action_str)
+                for event_type, event_code, value in events:
+                    if event_type == e.EV_KEY:
+                        if e.EV_KEY not in caps:
+                            caps[e.EV_KEY] = []
+                        if event_code not in caps[e.EV_KEY]:
+                            caps[e.EV_KEY].append(event_code)
+                    elif event_type == e.EV_REL:
+                        if e.EV_REL not in caps:
+                            caps[e.EV_REL] = []
+                        if event_code not in caps[e.EV_REL]:
+                            caps[e.EV_REL].append(event_code)
+
             profile = Profile(
                 name=profile_name,
                 window_class=window_class,
                 window_title=window_title,
                 app_id=app_id,
                 mapping=mapping,
-                capabilities=caps
+                capabilities=caps,
+                modifier_buttons=modifier_buttons,
+                modifier_mappings=modifier_mappings,
+                modifier_base_actions=modifier_base_actions,
+                mapping_comments=mapping_comments,
+                modifier_combo_comments=modifier_combo_comments
             )
 
             profiles.append(profile)
             logger.info(f"Loaded profile: {profile}")
+            if modifier_buttons:
+                logger.info(f"  Modifiers: {', '.join(modifier_buttons)}")
+            if modifier_mappings:
+                logger.info(f"  Modifier combos: {len(modifier_mappings)}")
 
     return profiles
 
@@ -422,6 +480,144 @@ def get_capabilities_from_mapping(mapping: Dict) -> Dict:
         caps[e.EV_REL] = list(rels)
 
     return caps
+
+
+# Define which controls can be modifiers (physical buttons with press/release events)
+VALID_MODIFIER_BUTTONS = {
+    'side', 'top', 'short', 'tall',
+    'c1', 'c2',
+    'dpad_up', 'dpad_down', 'dpad_left', 'dpad_right',
+    'scroll_click', 'knob_click', 'dial_click',
+    'tour'
+}
+
+# Rotary controls that CANNOT be modifiers (momentary, cannot be held)
+INVALID_MODIFIER_CONTROLS = {
+    'scroll_up', 'scroll_down',
+    'knob_cw', 'knob_ccw',
+    'dial_cw', 'dial_ccw'
+}
+
+
+def parse_modifier_mappings(config: configparser.ConfigParser, section_name: str) -> Tuple[Set[str], Dict[Tuple[str, str], str], Dict[str, str]]:
+    """Parse modifier button configurations from a profile section
+
+    Args:
+        config: ConfigParser instance
+        section_name: Name of the section (e.g., 'profile:default')
+
+    Returns:
+        Tuple of (modifier_buttons, modifier_mappings, modifier_base_actions)
+        - modifier_buttons: Set of button names that are modifiers
+        - modifier_mappings: Dict mapping (modifier, control) -> action_string
+        - modifier_base_actions: Dict mapping modifier -> base_action_string
+    """
+    modifier_buttons = set()
+    modifier_mappings = {}
+    modifier_base_actions = {}
+
+    # First pass: identify modifiers
+    for key, value in config[section_name].items():
+        # Check if this is a modifier declaration
+        if value.strip() == 'modifier':
+            control_name = key.strip()
+
+            # Validate that only physical buttons can be modifiers
+            if control_name in INVALID_MODIFIER_CONTROLS:
+                logger.error(f"Invalid modifier declaration: {control_name} cannot be a modifier (rotary controls cannot be held)")
+                logger.error(f"Only physical buttons with press/release events can be modifiers")
+                continue
+
+            if control_name not in VALID_MODIFIER_BUTTONS:
+                logger.warning(f"Unknown control declared as modifier: {control_name}")
+
+            modifier_buttons.add(control_name)
+            logger.debug(f"Found modifier button: {control_name}")
+
+    # Second pass: parse modifier base actions and combinations
+    for key, value in config[section_name].items():
+        # Skip non-modifier related keys
+        if key in ('window_class', 'window_title', 'app_id'):
+            continue
+
+        # Check for modifier base action: "modifier.base_action = ACTION"
+        if '.base_action' in key and not key.endswith('.comment'):
+            parts = key.split('.')
+            if len(parts) == 2:
+                modifier_name = parts[0].strip()
+                if modifier_name in modifier_buttons:
+                    modifier_base_actions[modifier_name] = value.strip()
+                    logger.debug(f"Found base action for modifier {modifier_name}: {value.strip()}")
+
+        # Check for modifier combination: "modifier.control = ACTION"
+        elif '.' in key and not key.endswith('.comment') and not key.endswith('.base_action'):
+            parts = key.split('.')
+            if len(parts) == 2:
+                modifier_name, control_name = parts[0].strip(), parts[1].strip()
+
+                # Check if this is a modifier combination
+                if modifier_name in modifier_buttons:
+                    # Validate: prevent self-referential combos
+                    if modifier_name == control_name:
+                        logger.error(f"Invalid self-referential combo: {key} = {value}")
+                        logger.error(f"A modifier button cannot be combined with itself")
+                        continue
+
+                    modifier_mappings[(modifier_name, control_name)] = value.strip()
+                    logger.debug(f"Found modifier combo: {modifier_name}.{control_name} = {value.strip()}")
+
+    return modifier_buttons, modifier_mappings, modifier_base_actions
+
+
+def parse_mapping_comments(config: configparser.ConfigParser, section_name: str) -> Tuple[Dict[str, str], Dict[Tuple[str, str], str]]:
+    """Parse comments for all mappings in a profile section
+
+    Args:
+        config: ConfigParser instance
+        section_name: Name of the section (e.g., 'profile:default')
+
+    Returns:
+        Tuple of (mapping_comments, modifier_combo_comments)
+        - mapping_comments: Dict mapping control -> comment
+        - modifier_combo_comments: Dict mapping (modifier, control) -> comment
+    """
+    mapping_comments = {}
+    modifier_combo_comments = {}
+
+    for key, value in config[section_name].items():
+        # Skip non-comment keys
+        if not key.endswith('.comment'):
+            continue
+
+        # Remove the .comment suffix to get the control/combo name
+        control_key = key[:-len('.comment')].strip()
+
+        # Convert escape sequences to actual newlines for multiline support
+        comment_text = value.strip().replace('\\n', '\n')
+
+        # Check if this is a combo comment: "modifier.control.comment"
+        if '.' in control_key:
+            parts = control_key.split('.')
+
+            # Check for base_action comment: "modifier.base_action.comment"
+            if len(parts) == 2 and parts[1] == 'base_action':
+                # Store as a special mapping comment for the base action
+                modifier_name = parts[0].strip()
+                mapping_comments[f"{modifier_name}.base_action"] = comment_text
+                logger.debug(f"Found base action comment for {modifier_name}: {comment_text[:50]}...")
+
+            # Regular combo comment: "modifier.control.comment"
+            elif len(parts) == 2:
+                modifier_name, control_name = parts[0].strip(), parts[1].strip()
+                modifier_combo_comments[(modifier_name, control_name)] = comment_text
+                logger.debug(f"Found combo comment for {modifier_name}.{control_name}: {comment_text[:50]}...")
+
+        # Regular control comment: "control.comment"
+        else:
+            mapping_comments[control_key] = comment_text
+            logger.debug(f"Found comment for {control_key}: {comment_text[:50]}...")
+
+    return mapping_comments, modifier_combo_comments
 
 
 def get_default_mapping():

@@ -1,5 +1,7 @@
 # TourBox Elite Linux Driver
 
+**Version 2.0.0**
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Linux](https://img.shields.io/badge/platform-linux-lightgrey.svg)](https://www.linux.org/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
@@ -12,9 +14,10 @@ Linux driver for the TourBox Elite - a Bluetooth Low Energy (BLE) input device b
 
 - ✅ **Graphical Configuration** - Full-featured GUI for visual configuration with live preview
 - ✅ **Bluetooth LE Support** - Wireless connection via BLE
-- ✅ **Full Button Mapping** - All 20 controls configurable (buttons, knobs, scroll wheel, dial)
 - ✅ **Application Profiles** - Different button mappings per application (Wayland only)
 - ✅ **Window Detection** - Automatic profile switching based on focused window
+- ✅ **Full Button Mapping** - All 20 controls configurable (buttons, knobs, scroll wheel, dial)
+- ✅ **Modifier Keys** - Create over 250 unique key combinations per profile using physical buttons as modifiers
 - ✅ **Systemd Integration** - Runs as a user service, starts on login
 - ✅ **Flexible Configuration** - Graphical GUI or manual INI-style config file editing
 
@@ -139,11 +142,29 @@ Without this extension, profile mode will not work on GNOME (the driver will use
 
 **Note:** Sway and Hyprland users don't need any additional software.
 
+## Updating
+
+To update to the latest version:
+
+```bash
+cd /path/to/tourboxelite
+git pull
+./install.sh
+```
+
+The installer will automatically:
+- Stop the running service if it's active
+- Update all files and dependencies
+- Preserve your existing configuration by default
+- Ask if you want to restart the service with the new version
+
+**Note:** It's safe to run the installer while the service is running - it will handle stopping and restarting automatically. Your configuration file and all profiles are preserved during updates.
+
 ## Configuration GUI
 
 The driver includes a **graphical configuration tool** that makes it easy to configure button mappings without editing config files manually.
 
-![TourBox Elite Configuration GUI](docs/images/gui-screenshot.png)
+![TourBox Elite Configuration GUI](docs/images/gui-screenshot.png?v=2.0.0)
 
 ### Running the GUI
 
@@ -332,23 +353,6 @@ When you're done testing, restart the service:
 ```bash
 systemctl --user start tourbox
 ```
-
-## Updating
-
-To update to the latest version:
-
-```bash
-cd /path/to/tourboxelite
-git pull
-./install.sh
-```
-
-The installer will automatically:
-- Stop the running service if it's active
-- Update all files and dependencies
-- Ask if you want to restart the service with the new version
-
-**Note:** It's safe to run the installer while the service is running - it will handle stopping and restarting automatically.
 
 ## Uninstall
 

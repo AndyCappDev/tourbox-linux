@@ -17,6 +17,8 @@ from evdev import ecodes as e
 # Import from existing driver code
 from tourboxelite.config_loader import Profile, BUTTON_CODES
 
+from tourboxelite.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER
+
 logger = logging.getLogger(__name__)
 
 
@@ -77,13 +79,17 @@ class ControlsList(QWidget):
 
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(2)
-        self.table.setHorizontalHeaderLabels(["Control", "Current Action"])
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Control", "Current Action", "Comment"])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.verticalHeader().setVisible(False)  # Hide row numbers
+        # Set row height based on font metrics for proper scaling
+        fm = self.table.fontMetrics()
+        self.table.verticalHeader().setDefaultSectionSize(int(fm.lineSpacing() * TABLE_ROW_HEIGHT_MULTIPLIER))
         self.table.itemSelectionChanged.connect(self._on_selection_changed)
 
         layout.addWidget(self.table)
@@ -133,6 +139,14 @@ class ControlsList(QWidget):
             action_item.setForeground(QBrush(QColor(0, 0, 0)))  # Black text
             self.table.setItem(row, 1, action_item)
 
+            # Comment column
+            comment_text = profile.mapping_comments.get(control_name, "")
+            comment_item = QTableWidgetItem(comment_text)
+            comment_item.setFlags(comment_item.flags() & ~Qt.ItemIsEditable)
+            comment_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            comment_item.setForeground(QBrush(QColor(0, 0, 0)))  # Black text
+            self.table.setItem(row, 2, comment_item)
+
             # Verify it was set
             verify_item = self.table.item(row, 1)
             logger.debug(f"  Verified table item at row {row}: {verify_item.text() if verify_item else 'None'}")
@@ -149,6 +163,10 @@ class ControlsList(QWidget):
         # Scroll to top of the list
         self.table.scrollToTop()
 
+        # Select the first control
+        if self.table.rowCount() > 0:
+            self.table.selectRow(0)
+
         logger.info(f"Loaded {len(CONTROL_NAMES)} controls for profile: {profile.name}")
 
     def _get_action_text(self, profile: Profile, control_name: str) -> str:
@@ -162,6 +180,17 @@ class ControlsList(QWidget):
             Human-readable action description
         """
         try:
+            # First check if this control is a modifier button
+            if control_name in profile.modifier_buttons:
+                # It's a modifier - show base action if configured
+                if control_name in profile.modifier_base_actions:
+                    # Parse base action to get readable text
+                    base_action = profile.modifier_base_actions[control_name]
+                    return self._parse_action_string_to_readable(base_action)
+                else:
+                    # No base action configured
+                    return "(no base action)"
+
             if control_name not in BUTTON_CODES:
                 logger.warning(f"Control {control_name} not in BUTTON_CODES")
                 return "(unknown)"
@@ -219,6 +248,75 @@ class ControlsList(QWidget):
             logger.error(f"Error getting action text for {control_name}: {ex}", exc_info=True)
             return "(error)"
 
+    def _parse_action_string_to_readable(self, action_str: str) -> str:
+        """Parse an action string to human-readable format
+
+        Args:
+            action_str: Action string like 'KEY_LEFTCTRL' or 'KEY_LEFTCTRL+KEY_C'
+
+        Returns:
+            Readable string like 'Ctrl' or 'Ctrl+C'
+        """
+        if not action_str or action_str == "none":
+            return "(none)"
+
+        # Handle REL events
+        if action_str.startswith("REL_"):
+            if "WHEEL:" in action_str:
+                value = int(action_str.split(":")[1])
+                return f"Wheel {'Up' if value > 0 else 'Down'}"
+            elif "HWHEEL:" in action_str:
+                value = int(action_str.split(":")[1])
+                return f"Wheel {'Right' if value > 0 else 'Left'}"
+
+        # Symbol key mapping
+        SYMBOL_MAP = {
+            'LEFTBRACE': '[',
+            'RIGHTBRACE': ']',
+            'SEMICOLON': ';',
+            'APOSTROPHE': "'",
+            'GRAVE': '`',
+            'BACKSLASH': '\\',
+            'COMMA': ',',
+            'DOT': '.',
+            'SLASH': '/',
+            'MINUS': '-',
+            'EQUAL': '=',
+        }
+
+        # Parse keyboard combination
+        parts = action_str.split("+")
+        readable_parts = []
+
+        for part in parts:
+            part = part.strip()
+            if part.startswith("KEY_"):
+                key_name = part[4:]  # Remove "KEY_" prefix
+
+                # Map special keys to readable names
+                key_map = {
+                    'LEFTCTRL': 'Ctrl', 'RIGHTCTRL': 'Ctrl',
+                    'LEFTALT': 'Alt', 'RIGHTALT': 'Alt',
+                    'LEFTSHIFT': 'Shift', 'RIGHTSHIFT': 'Shift',
+                    'LEFTMETA': 'Super', 'RIGHTMETA': 'Super',
+                    'SPACE': 'Space', 'ENTER': 'Enter', 'ESC': 'Esc',
+                    'TAB': 'Tab', 'BACKSPACE': 'Backspace',
+                }
+
+                if key_name in key_map:
+                    readable_parts.append(key_map[key_name])
+                # Check if it's a symbol key
+                elif key_name in SYMBOL_MAP:
+                    readable_parts.append(SYMBOL_MAP[key_name])
+                elif len(key_name) == 1:
+                    readable_parts.append(key_name)
+                else:
+                    readable_parts.append(key_name.capitalize())
+            else:
+                readable_parts.append(part)
+
+        return "+".join(readable_parts)
+
     def _get_key_name(self, key_code: int) -> str:
         """Get human-readable key name from evdev code"""
         # Map common symbol keys to their actual symbols
@@ -274,7 +372,7 @@ class ControlsList(QWidget):
         item = QTableWidgetItem("No profile selected")
         item.setFlags(item.flags() & ~Qt.ItemIsEditable)
         self.table.setItem(0, 0, item)
-        self.table.setSpan(0, 0, 1, 2)
+        self.table.setSpan(0, 0, 1, 3)
 
     def _on_selection_changed(self):
         """Handle row selection change"""

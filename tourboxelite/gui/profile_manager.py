@@ -22,6 +22,9 @@ from .profile_settings_dialog import ProfileSettingsDialog
 # Import config writer for deletion
 from .config_writer import delete_profile
 
+# Import UI constants
+from tourboxelite.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,6 +61,9 @@ class ProfileManager(QWidget):
         self.profile_table.setSelectionMode(QTableWidget.SingleSelection)
         self.profile_table.setEditTriggers(QTableWidget.NoEditTriggers)  # Read-only
         self.profile_table.verticalHeader().setVisible(False)  # Hide row numbers
+        # Set row height based on font metrics for proper scaling
+        fm = self.profile_table.fontMetrics()
+        self.profile_table.verticalHeader().setDefaultSectionSize(int(fm.lineSpacing() * TABLE_ROW_HEIGHT_MULTIPLIER))
         self.profile_table.currentCellChanged.connect(self._on_profile_selection_changed)
         layout.addWidget(self.profile_table)
 
