@@ -96,7 +96,11 @@ class ProfileManager(QWidget):
         self.profiles = profiles
         self.profile_table.setRowCount(0)
 
-        for row, profile in enumerate(profiles):
+        # Filter out the TourBox GUI meta-configuration profile
+        # (it's for internal use and shouldn't be edited by users)
+        displayed_profiles = [p for p in profiles if p.name != 'TourBox GUI']
+
+        for row, profile in enumerate(displayed_profiles):
             self.profile_table.insertRow(row)
 
             # Column 0: Profile name
@@ -116,7 +120,7 @@ class ProfileManager(QWidget):
                 self.current_profile = profile
                 self.profile_selected.emit(profile)
 
-        logger.info(f"Loaded {len(profiles)} profiles")
+        logger.info(f"Loaded {len(displayed_profiles)} profiles (filtered out {len(profiles) - len(displayed_profiles)} internal profiles)")
 
         # Enable/disable delete button
         self._update_button_states()

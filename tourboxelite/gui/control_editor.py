@@ -601,23 +601,27 @@ class ControlEditor(QWidget):
         self.combos_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.combos_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.combos_table.horizontalHeader().setStretchLastSection(False)
-        self.combos_table.setColumnWidth(3, 120)  # Fixed width for button column
+        self.combos_table.setColumnWidth(3, 80)  # Fixed width for icon button column
         self.combos_table.setEditTriggers(QTableWidget.NoEditTriggers)  # Read-only
         self.combos_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.combos_table.setSelectionMode(QTableWidget.SingleSelection)
         self.combos_table.verticalHeader().setVisible(False)  # Hide row numbers
+
         # Ensure vertical scrollbar is shown only when needed
-        from PySide6.QtCore import Qt
         self.combos_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
         # Set row height and table max height based on font metrics for proper scaling
         fm = self.combos_table.fontMetrics()
         row_height = int(fm.lineSpacing() * TABLE_ROW_HEIGHT_MULTIPLIER)
         self.combos_table.verticalHeader().setDefaultSectionSize(row_height)
+
         # Set max height to fit ~6 rows plus header (allows table to scale but caps it)
         header_height = self.combos_table.horizontalHeader().height()
+
         # Header height might be 0 at init, use reasonable default based on font metrics
         if header_height < 20:
             header_height = int(fm.lineSpacing() * 1.5)  # Base on font size
+
         # Calculate max height: 6 rows + header + frame/borders (shows ~4 rows initially, can grow to 6)
         max_table_height = row_height * 6 + header_height + 4
         self.combos_table.setMaximumHeight(max_table_height)
@@ -1025,11 +1029,19 @@ class ControlEditor(QWidget):
         button_layout = QHBoxLayout(button_widget)
         button_layout.setContentsMargins(2, 2, 2, 2)
 
-        edit_btn = QPushButton("Edit")
+        # Edit button with icon
+        edit_btn = QPushButton()
+        edit_btn.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_FileDialogDetailedView))
+        edit_btn.setToolTip("Edit this combination")
+        edit_btn.setMaximumWidth(32)
         edit_btn.clicked.connect(lambda: self._on_edit_combo(row))
         button_layout.addWidget(edit_btn)
 
-        delete_btn = QPushButton("Delete")
+        # Delete button with icon
+        delete_btn = QPushButton()
+        delete_btn.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_TrashIcon))
+        delete_btn.setToolTip("Delete this combination")
+        delete_btn.setMaximumWidth(32)
         delete_btn.clicked.connect(lambda: self._delete_combo_row(row))
         button_layout.addWidget(delete_btn)
 

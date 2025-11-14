@@ -141,7 +141,7 @@ KEY_NAMES = {
     **{f'KEY_{chr(i)}': getattr(e, f'KEY_{chr(i)}') for i in range(ord('A'), ord('Z') + 1)},
     # Number keys
     **{f'KEY_{i}': getattr(e, f'KEY_{i}') for i in range(0, 10)},
-    # Function keys
+    # Function keys (F1-F12, includes extended function keys for meta-configuration)
     **{f'KEY_F{i}': getattr(e, f'KEY_F{i}') for i in range(1, 13)},
 }
 

@@ -827,6 +827,67 @@ class TourBoxConfigWindow(QMainWindow):
             return
 
         key = event.key()
+        modifiers = event.modifiers()
+
+        # Check for meta-configuration key combinations
+        # Ctrl+Alt+Shift+F1-F12 for first 12 controls
+        # Ctrl+Alt+Shift+1-8 for remaining 8 controls
+        # These allow the TourBox to control its own GUI - pressing a physical
+        # control automatically selects it in the Controls Configuration table
+
+        meta_key_map = None
+
+        # Meta-configuration: Ctrl+Alt+Shift + [F1-F12 or 1-8]
+        # Group 1: F1-F12 for first 12 controls
+        # Group 2: 1-8 for remaining 8 controls
+        if (modifiers & Qt.ControlModifier and
+            modifiers & Qt.AltModifier and
+            modifiers & Qt.ShiftModifier):
+
+            meta_key_map = {
+                # Group 1: F1-F12
+                Qt.Key_F1: 'side',
+                Qt.Key_F2: 'top',
+                Qt.Key_F3: 'tall',
+                Qt.Key_F4: 'short',
+                Qt.Key_F5: 'c1',
+                Qt.Key_F6: 'c2',
+                Qt.Key_F7: 'tour',
+                Qt.Key_F8: 'dpad_up',
+                Qt.Key_F9: 'dpad_down',
+                Qt.Key_F10: 'dpad_left',
+                Qt.Key_F11: 'dpad_right',
+                Qt.Key_F12: 'scroll_up',
+                # Group 2: 1-8 (and their shifted symbol equivalents)
+                # When Shift is held, Qt interprets number keys as symbols
+                Qt.Key_1: 'scroll_down',
+                Qt.Key_Exclam: 'scroll_down',          # Shift+1 = !
+                Qt.Key_2: 'scroll_click',
+                Qt.Key_At: 'scroll_click',             # Shift+2 = @
+                Qt.Key_3: 'knob_cw',
+                Qt.Key_NumberSign: 'knob_cw',          # Shift+3 = #
+                Qt.Key_4: 'knob_ccw',
+                Qt.Key_Dollar: 'knob_ccw',             # Shift+4 = $
+                Qt.Key_5: 'knob_click',
+                Qt.Key_Percent: 'knob_click',          # Shift+5 = %
+                Qt.Key_6: 'dial_cw',
+                Qt.Key_AsciiCircum: 'dial_cw',         # Shift+6 = ^
+                Qt.Key_7: 'dial_ccw',
+                Qt.Key_Ampersand: 'dial_ccw',          # Shift+7 = &
+                Qt.Key_8: 'dial_click',
+                Qt.Key_Asterisk: 'dial_click',         # Shift+8 = *
+            }
+
+        if meta_key_map and key in meta_key_map:
+            control_name = meta_key_map[key]
+            logger.info(f"Meta-configuration: Selecting control '{control_name}'")
+
+            # Select the control in the controls list
+            self.controls_list.select_control(control_name)
+
+            # Accept the event so it doesn't propagate
+            event.accept()
+            return
 
         # Define the navigation order for the three main panes
         focusable_widgets = [
