@@ -164,7 +164,7 @@ The installer will automatically:
 
 The driver includes a **graphical configuration tool** that makes it easy to configure button mappings without editing config files manually.
 
-![TourBox Elite Configuration GUI](docs/images/gui-screenshot.png?v=2.0.0)
+![TourBox Elite Configuration GUI](docs/images/gui-screenshot.png?v=2.0.1)
 
 ### Running the GUI
 

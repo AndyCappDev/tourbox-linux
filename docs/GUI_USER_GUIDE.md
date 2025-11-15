@@ -69,7 +69,7 @@ tourbox-gui
 
 ## Understanding the Interface
 
-![TourBox Elite Configuration GUI](images/gui-screenshot.png?v=2.0.0)
+![TourBox Elite Configuration GUI](images/gui-screenshot.png?v=2.0.1)
 
 The GUI has a 4-panel layout:
 
@@ -726,7 +726,7 @@ Speed up your workflow with keyboard shortcuts:
    ls -la ~/.config/tourbox/mappings.conf.backup.*
    ```
 
-### Button Presses Don't Work in Test Mode
+### Button Presses Don't Work in When Testing
 
 **Problem:** Physical button presses do nothing during Test
 

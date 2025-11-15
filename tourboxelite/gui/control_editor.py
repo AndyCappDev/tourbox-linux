@@ -66,6 +66,21 @@ CHAR_TO_KEYCODE = {
     ')': '0',  # Shift+0
 }
 
+# Keycode to character mapping for symbols (reverse lookup for parsing)
+KEYCODE_TO_CHAR = {
+    'LEFTBRACE': '[',
+    'RIGHTBRACE': ']',
+    'SEMICOLON': ';',
+    'APOSTROPHE': "'",
+    'GRAVE': '`',
+    'BACKSLASH': '\\',
+    'COMMA': ',',
+    'DOT': '.',
+    'SLASH': '/',
+    'MINUS': '-',
+    'EQUAL': '=',
+}
+
 # Special keys that can't be reliably typed
 SPECIAL_KEYS = {
     'None': None,
@@ -355,6 +370,10 @@ class ComboConfigDialog(QDialog):
                 key_part = part
                 if key_part.startswith("KEY_"):
                     key_part = key_part[4:]  # Remove "KEY_" prefix
+
+                # Convert symbol keycodes to their actual characters
+                if key_part.upper() in KEYCODE_TO_CHAR:
+                    key_part = KEYCODE_TO_CHAR[key_part.upper()]
 
                 if len(key_part) == 1:
                     self.key_input.setText(key_part.lower())
@@ -770,6 +789,10 @@ class ControlEditor(QWidget):
                 key_part = part
                 if key_part.startswith("KEY_"):
                     key_part = key_part[4:]  # Remove "KEY_" prefix
+
+                # Convert symbol keycodes to their actual characters
+                if key_part.upper() in KEYCODE_TO_CHAR:
+                    key_part = KEYCODE_TO_CHAR[key_part.upper()]
 
                 # Check if it's a single character (letter, number, or symbol)
                 if len(key_part) == 1:
