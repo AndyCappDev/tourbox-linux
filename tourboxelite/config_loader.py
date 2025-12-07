@@ -276,7 +276,7 @@ def load_device_config(config_path: str = None) -> Dict[str, str]:
 
     logger.info(f"Loading device config from {config_path}")
 
-    config = configparser.ConfigParser(inline_comment_prefixes=('#',))
+    config = configparser.ConfigParser(inline_comment_prefixes=('#',), interpolation=None)
     config.read(config_path)
 
     device_config = {}
@@ -358,7 +358,7 @@ def load_profiles(config_path: str = None) -> List[Profile]:
 
     logger.info(f"Loading profiles from {config_path}")
 
-    config = configparser.ConfigParser(inline_comment_prefixes=('#',))
+    config = configparser.ConfigParser(inline_comment_prefixes=('#',), interpolation=None)
     config.read(config_path)
 
     profiles = []
