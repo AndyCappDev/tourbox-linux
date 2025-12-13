@@ -284,6 +284,8 @@ def load_device_config(config_path: str = None) -> Dict[str, str]:
     if 'device' in config:
         if 'mac_address' in config['device']:
             device_config['mac_address'] = config['device']['mac_address'].strip()
+        if 'usb_port' in config['device']:
+            device_config['usb_port'] = config['device']['usb_port'].strip()
 
     return device_config
 

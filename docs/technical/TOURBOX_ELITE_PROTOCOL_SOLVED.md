@@ -1,15 +1,15 @@
-# TourBox Elite BLE Protocol - SOLVED
+# TourBox Elite Protocol - SOLVED
 
-**Date:** October 31, 2025
-**Status:** ✅ WORKING - Device successfully initialized and responding on Linux
+**Date:** October 31, 2025 (BLE), December 2025 (USB)
+**Status:** ✅ WORKING - Both USB and Bluetooth LE fully functional on Linux
 
 ---
 
 ## Executive Summary
 
-Successfully reverse-engineered the TourBox Elite BLE authentication protocol by capturing Windows traffic with Microsoft's Bluetooth Virtual Sniffer (BTVS). The device requires a specific unlock sequence before it will report button presses.
+Successfully reverse-engineered the TourBox Elite authentication protocol by capturing Windows traffic with Microsoft's Bluetooth Virtual Sniffer (BTVS). The device requires a specific unlock sequence before it will report button presses.
 
-**Key Achievement:** TourBox Elite now works on Linux via Bluetooth Low Energy without requiring the official Windows software.
+**Key Achievement:** TourBox Elite now works on Linux via both **USB** and **Bluetooth Low Energy** without requiring the official Windows software. The same unlock command and button codes work for both connection methods.
 
 ---
 
@@ -283,30 +283,61 @@ python3 ble_unlock_tourbox.py
 
 ---
 
+## USB Protocol
+
+The TourBox Elite also supports USB connection via CDC ACM serial interface. The USB protocol uses the **same unlock command and button codes** as Bluetooth LE.
+
+### USB Connection Details
+
+- **Device Path:** `/dev/ttyACM0` (Linux CDC ACM driver)
+- **USB IDs:** Vendor 0xc251, Product 0x2005
+- **Baud Rate:** 115200 (or any standard rate - CDC ACM is virtual serial)
+- **Permissions:** User must be in `dialout` group
+
+### USB Initialization Sequence
+
+The USB initialization is identical to BLE:
+
+1. **Open serial port** at `/dev/ttyACM0`
+2. **Send unlock command:** `55 00 07 88 94 00 1a fe` (same as BLE)
+3. **Send configuration commands:** Same 5 config packets as BLE
+4. **Read button data:** Single-byte button codes (same format as BLE)
+
+### USB vs BLE Comparison
+
+| Aspect | USB | Bluetooth LE |
+|--------|-----|--------------|
+| Connection | `/dev/ttyACM0` serial | GATT over BLE |
+| Unlock command | `5500078894001afe` | `5500078894001afe` |
+| Button codes | Single byte (0x01, 0x81, etc.) | Single byte (same codes) |
+| Config commands | Same 5 packets | Same 5 packets |
+| User setup | Just plug in cable | Configure MAC address |
+| Permissions | `dialout` group | `input` group |
+
+**Key Finding:** The unlock command and button codes are identical for both USB and BLE. The device uses the same application-layer protocol regardless of transport.
+
+---
+
 ## Comparison with Previous Attempts
 
-### What Didn't Work
+### What Didn't Work Initially
 
-1. **USB Serial (CDC ACM):** Device creates `/dev/ttyACM0` but:
-   - Requires unknown initialization sequence
-   - All baudrates silent
-   - Appears to need Windows driver initialization first
-
-2. **Traditional BLE Pairing:**
+1. **Traditional BLE Pairing:**
    - Authentication always failed (status 0x05)
    - Classic pairing methods don't work
    - Device uses application-layer auth instead
 
-3. **Direct BLE Connection (no unlock):**
+2. **Direct BLE Connection (no unlock):**
    - Device connects successfully
    - Reports `<!not_allow_config!>` to all commands
    - Requires specific unlock sequence discovered via capture
 
 ### What Worked
 
-- **Application-layer authentication** via specific unlock command
+- **Application-layer authentication** via specific unlock command (works for both USB and BLE)
 - **No traditional BLE pairing required** - just connect and authenticate
 - **Windows traffic capture** revealed the exact sequence
+- **USB serial works** with the same unlock command as BLE
 
 ---
 
@@ -397,6 +428,6 @@ This documentation is provided for educational and interoperability purposes. Th
 
 ---
 
-**Status:** Protocol fully documented and working ✅
-**Last Updated:** October 31, 2025
+**Status:** Protocol fully documented and working (USB and BLE) ✅
+**Last Updated:** December 2025
 **Contact:** Share improvements via GitHub issues or pull requests

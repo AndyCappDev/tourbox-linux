@@ -68,20 +68,26 @@ systemctl --user stop tourbox
 Run directly in your terminal:
 
 ```bash
-# Basic run
-./venv/bin/python -m tourboxelite.device_ble
+# Basic run (auto-detects USB if connected, falls back to BLE)
+./venv/bin/python -m tourboxelite
 
 # With verbose logging (shows all button events)
-./venv/bin/python -m tourboxelite.device_ble -v
+./venv/bin/python -m tourboxelite -v
 
-# Specify MAC address via command line (overrides config)
-./venv/bin/python -m tourboxelite.device_ble D9:BE:1E:CC:40:D7
+# Force USB mode (even if BLE would work)
+./venv/bin/python -m tourboxelite --usb -v
+
+# Force BLE mode (even if USB is connected)
+./venv/bin/python -m tourboxelite --ble -v
+
+# Specify MAC address via command line (overrides config, BLE only)
+./venv/bin/python -m tourboxelite --ble D9:BE:1E:CC:40:D7
 
 # Specify custom config file
-./venv/bin/python -m tourboxelite.device_ble -c /path/to/custom/config.conf
+./venv/bin/python -m tourboxelite -c /path/to/custom/config.conf
 
 # Combine options
-./venv/bin/python -m tourboxelite.device_ble -v -c custom.conf
+./venv/bin/python -m tourboxelite -v -c custom.conf
 ```
 
 **Press `Ctrl+C` to stop.**
@@ -105,13 +111,19 @@ systemctl --user restart tourbox
 ### Command Line Options
 
 ```bash
-./venv/bin/python -m tourboxelite.device_ble --help
+./venv/bin/python -m tourboxelite --help
 ```
 
 Available options:
-- `mac_address` - Bluetooth MAC address (optional, overrides config file)
+- `mac_address` - Bluetooth MAC address (optional, overrides config file, BLE only)
+- `--usb` - Force USB mode (use /dev/ttyACM0)
+- `--ble` - Force Bluetooth LE mode
 - `-c, --config` - Path to custom config file
 - `-v, --verbose` - Enable verbose/debug logging
+
+**Auto-detection:** If neither `--usb` nor `--ble` is specified, the driver automatically detects the connection type:
+- If `/dev/ttyACM0` exists → uses USB
+- Otherwise → uses Bluetooth LE
 
 ## 🖥️ Running the GUI
 
@@ -153,14 +165,14 @@ For complete GUI usage instructions, see [GUI_USER_GUIDE.md](GUI_USER_GUIDE.md).
 Enable verbose logging to see detailed button events:
 
 ```bash
-./venv/bin/python -m tourboxelite.device_ble -v
+./venv/bin/python -m tourboxelite -v
 ```
 
 Output shows:
 - Button press/release events with hex codes
 - Profile switching events
 - Window focus changes
-- BLE connection status
+- USB/BLE connection status
 - Input event generation
 
 Example output:
@@ -176,14 +188,17 @@ Button #2: c4 -> 2 events  # Knob CW stop
 
 ### Debug Button Codes
 
-To see raw button codes without mapping them, use the test script:
+To see raw button codes without mapping them, use the test scripts:
 
 ```bash
 # Stop the service first
 systemctl --user stop tourbox
 
-# Run the BLE test script
+# Run the USB test script (if connected via USB)
 cd /path/to/tourboxelite
+./venv/bin/python usb_test_tourbox.py
+
+# Or run the BLE test script (if using Bluetooth)
 ./venv/bin/python ble_test_tourbox.py
 
 # Press buttons and observe hex codes
@@ -237,7 +252,10 @@ sudo evtest
 tourboxelite/
 ├── tourboxelite/                                   # Main package
 │   ├── __init__.py                                 # Version info
-│   ├── device_ble.py                               # Main BLE driver (TourBoxBLE class)
+│   ├── __main__.py                                 # Unified entry point with auto-detection
+│   ├── device_base.py                              # Abstract base class with shared logic
+│   ├── device_ble.py                               # Bluetooth LE driver (TourBoxBLE class)
+│   ├── device_usb.py                               # USB serial driver (TourBoxUSB class)
 │   ├── config_loader.py                            # Config file parsing and profile management
 │   ├── window_monitor.py                           # Wayland window detection
 │   ├── default_mappings.conf                       # Default configuration template
@@ -273,7 +291,8 @@ tourboxelite/
 │       ├── LOG_MANAGEMENT.md                       # Logging documentation
 │       └── WINDOWS_BLE_CAPTURE_GUIDE.md            # Windows BLE capture guide
 ├── ble_test_tourbox.py                             # BLE test script for capturing button codes
-├── ble_test_events.py                              # Test script for BLE events
+├── usb_test_tourbox.py                             # USB test script for capturing button codes
+├── ble_test_events.py                              # Test script to find TourBox input device
 ├── monitor_keys.py                                 # Utility to monitor key events
 ├── install.sh                                      # Installation script (includes GUI deps & launcher)
 ├── uninstall.sh                                    # Uninstallation script (removes GUI launcher)
@@ -291,12 +310,31 @@ tourboxelite/
 
 #### Core Driver Files
 
-**`device_ble.py`** - Main driver logic
-- `TourBoxBLE` class - Main driver
-- BLE connection handling
-- Button event processing
+**`__main__.py`** - Unified entry point
+- Auto-detects USB vs BLE connection
+- Checks for `/dev/ttyACM0` existence
+- Command-line argument parsing
+- Launches appropriate driver (USB or BLE)
+
+**`device_base.py`** - Abstract base class
+- `TourBoxBase` abstract class with shared logic
+- Button event processing (`process_button_code()`)
+- Modifier key state machine
 - Profile switching
-- Virtual input device creation
+- Virtual input device creation via UInput
+- Window monitoring integration
+
+**`device_ble.py`** - Bluetooth LE driver
+- `TourBoxBLE` class (inherits from TourBoxBase)
+- BLE connection handling via Bleak
+- GATT characteristic setup
+- BLE-specific unlock sequence
+
+**`device_usb.py`** - USB serial driver
+- `TourBoxUSB` class (inherits from TourBoxBase)
+- USB serial connection via pyserial
+- `/dev/ttyACM0` communication
+- USB-specific initialization
 
 **`config_loader.py`** - Configuration
 - Parse INI config files
@@ -312,9 +350,14 @@ tourboxelite/
 - Hyprland support
 
 **`ble_test_tourbox.py`** - BLE test script
-- Captures raw button codes
-- Used for reverse engineering protocol
-- See BUTTON_MAPPING_GUIDE.md
+- Captures raw button codes via Bluetooth LE
+- Sends unlock and config commands
+- Used for BLE protocol debugging
+
+**`usb_test_tourbox.py`** - USB test script
+- Captures raw button codes via USB serial
+- Sends unlock and config commands
+- Used for USB protocol debugging
 
 #### GUI Files
 
@@ -390,7 +433,7 @@ tourboxelite/
 
 3. **Test directly** with verbose logging:
    ```bash
-   ./venv/bin/python -m tourboxelite.device_ble -v
+   ./venv/bin/python -m tourboxelite -v
    ```
 
 4. **Test your changes** by pressing buttons on the TourBox
@@ -409,7 +452,7 @@ tourboxelite/
 nano ~/.config/tourbox/mappings.conf
 
 # Test changes immediately
-./venv/bin/python -m tourboxelite.device_ble -v
+./venv/bin/python -m tourboxelite -v
 
 # Or restart service
 systemctl --user restart tourbox
@@ -419,7 +462,7 @@ systemctl --user restart tourbox
 
 1. **Find the button code** - Run with verbose mode and press the button:
    ```bash
-   ./venv/bin/python -m tourboxelite.device_ble -v
+   ./venv/bin/python -m tourboxelite -v
    # Press the button
    # Look for: "Unknown button code: XX" or "Button #N: XX -> Y events"
    ```
@@ -701,7 +744,7 @@ self.widget.blockSignals(False)
 
 ```bash
 # Run with verbose logging
-./venv/bin/python -m tourboxelite.device_ble -v
+./venv/bin/python -m tourboxelite -v
 
 # Switch between applications (VSCode, Firefox, etc.)
 # Watch console for profile switch messages:
@@ -712,7 +755,7 @@ self.widget.blockSignals(False)
 
 ```bash
 # Run driver
-./venv/bin/python -m tourboxelite.device_ble -v
+./venv/bin/python -m tourboxelite -v
 
 # In another terminal, monitor input events
 sudo evtest
@@ -894,7 +937,7 @@ Bad:
 ### Enable Maximum Logging
 
 ```python
-# Edit device_ble.py main():
+# Edit __main__.py or device_base.py main():
 logging.basicConfig(
     level=logging.DEBUG,  # Change from INFO to DEBUG
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -913,7 +956,7 @@ logging.basicConfig(
 ```bash
 # Use user runtime directory (already fixed in code)
 # Or set manually:
-pidfile=/tmp/tourbox.pid ./venv/bin/python -m tourboxelite.device_ble
+pidfile=/tmp/tourbox.pid ./venv/bin/python -m tourboxelite
 ```
 
 **"Connection failed"**

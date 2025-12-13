@@ -169,6 +169,26 @@ else
     echo -e "${GREEN}✓${NC} User is in input group"
 fi
 
+# Check if user is in dialout group (for USB access)
+if ! groups | grep -q '\bdialout\b'; then
+    echo -e "${YELLOW}!${NC} User '$USER' is not in the 'dialout' group"
+    echo ""
+    echo "The driver needs dialout group for USB serial port access."
+    echo ""
+    echo "Adding user to dialout group (requires sudo):"
+    sudo usermod -a -G dialout $USER
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓${NC} User added to dialout group"
+        NEED_RELOGIN=true
+    else
+        echo -e "${RED}Error: Failed to add user to dialout group${NC}"
+        exit 1
+    fi
+else
+    echo -e "${GREEN}✓${NC} User is in dialout group"
+fi
+
 # Set up udev rule for /dev/uinput permissions
 echo ""
 echo "Configuring /dev/uinput permissions..."
@@ -327,13 +347,17 @@ else
 
     # Prompt for MAC address
     echo ""
-    echo "To find your TourBox MAC address:"
-    echo "  1. Open another terminal (keep this one visible)"
-    echo "  2. Make sure your TourBox Elite is powered on (Bluetooth mode, not USB)"
-    echo "  3. Run: bluetoothctl devices"
-    echo "  4. Look for 'TourBox Elite' in the output"
+    echo "The driver supports both USB and Bluetooth connections."
     echo ""
-    read -p "Enter TourBox MAC address (XX:XX:XX:XX:XX:XX) or press Enter to skip: " MAC_ADDRESS
+    echo "  USB:       Just plug in the cable - no configuration needed"
+    echo "  Bluetooth: Requires MAC address (see below)"
+    echo ""
+    echo "To find your TourBox MAC address (for Bluetooth):"
+    echo "  1. Make sure TourBox is powered on and NOT connected via USB"
+    echo "  2. Run: bluetoothctl devices"
+    echo "  3. Look for 'TourBox Elite' in the output"
+    echo ""
+    read -p "Enter MAC address for Bluetooth (or press Enter to skip for USB-only): " MAC_ADDRESS
 
     if [ -n "$MAC_ADDRESS" ]; then
         if [[ $MAC_ADDRESS =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
@@ -373,7 +397,7 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=$SCRIPT_DIR/venv/bin/python -m tourboxelite.device_ble
+ExecStart=$SCRIPT_DIR/venv/bin/python -m tourboxelite
 Restart=on-failure
 RestartSec=5
 

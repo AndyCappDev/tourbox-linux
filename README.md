@@ -9,20 +9,18 @@
 **Author:** Scott Bowman ([AndyCappDev](https://github.com/AndyCappDev))
 **Original Repository:** [github.com/AndyCappDev/tourboxelite](https://github.com/AndyCappDev/tourboxelite)
 
-Linux driver for the TourBox Elite and Elite Plus - a Bluetooth Low Energy (BLE) input device by TourBox Tech Inc. This driver translates BLE input events to Linux input events via evdev/uinput.
-
-> **⚠️ Important:** This driver is for **Bluetooth connections only**. It does **NOT** support USB connections.
+Linux driver for the TourBox Elite and Elite Plus by TourBox Tech Inc. This driver translates input events to Linux input events via evdev/uinput, supporting both **USB** and **Bluetooth LE** connections.
 
 ## Features
 
 - ✅ **Graphical Configuration** - Full-featured GUI for visual configuration with live preview
-- ✅ **Bluetooth LE Support** - Wireless connection via BLE
+- ✅ **USB and Bluetooth LE** - Connect via USB cable or wirelessly via Bluetooth
+- ✅ **Auto-Detection** - Automatically uses USB if connected, falls back to Bluetooth
 - ✅ **Application Profiles** - Different button mappings per application (Wayland only)
 - ✅ **Window Detection** - Automatic profile switching based on focused window
 - ✅ **Full Button Mapping** - All 20 controls configurable (buttons, knobs, scroll wheel, dial)
 - ✅ **Modifier Keys** - Create over 250 unique key combinations per profile using physical buttons as modifiers
 - ✅ **Systemd Integration** - Runs as a user service, starts on login
-- ✅ **Flexible Configuration** - Graphical GUI or manual INI-style config file editing
 
 ## Requirements
 
@@ -30,7 +28,8 @@ Linux driver for the TourBox Elite and Elite Plus - a Bluetooth Low Energy (BLE)
 
 - Linux (Debian, Ubuntu, Fedora, Arch tested)
 - Python 3.9+
-- Bluetooth support (bluez)
+- Bluetooth support (bluez) - for Bluetooth LE connection
+- User must be in `dialout` group - for USB connection
 - Build tools for compiling Python packages:
   - **Debian/Ubuntu:** `gcc python3-dev linux-headers-generic`
   - **Fedora/RHEL:** `gcc python3-devel kernel-headers`
@@ -55,19 +54,33 @@ Linux driver for the TourBox Elite and Elite Plus - a Bluetooth Low Energy (BLE)
 
 ## Quick Install
 
-> **Note:** You do NOT need to pair the TourBox Elite via Bluetooth settings. Pairing is not required and won't work. The driver connects directly to the device using its MAC address.
+### Connection Options
 
-### Step 1: Find Your TourBox MAC Address
+The driver supports two connection methods:
 
-First, make sure your TourBox Elite is powered on and in Bluetooth mode. Do not connect with the USB cable.
+| Method | How to Use | Requirements |
+|--------|------------|--------------|
+| **USB** | Just plug in the USB-C cable | User in `dialout` group |
+| **Bluetooth LE** | Turn on the TourBox (don't connect USB) | MAC address in config |
 
-Open a terminal and scan for your TourBox:
+The driver **auto-detects** the connection type:
+- Scans all `/dev/ttyACM*` devices and probes each for a TourBox response
+- If a TourBox is found on USB, it uses that port
+- Otherwise, it uses Bluetooth LE
+
+> **Note:** For Bluetooth, you do NOT need to pair via system Bluetooth settings. The driver connects directly using the MAC address.
+
+### Step 1: Find Your TourBox MAC Address (Bluetooth only)
+
+**Skip this step if you only plan to use USB.**
+
+Make sure your TourBox Elite is powered on and NOT connected via USB.
 
 ```bash
 bluetoothctl devices
 ```
 
-Look for a device named "TourBox Elite" in the output. The MAC address will look like `XX:XX:XX:XX:XX:XX`. Copy this address - you'll need it in Step 2 or 3.
+Look for "TourBox Elite" - copy the MAC address (format: `XX:XX:XX:XX:XX:XX`).
 
 Example output:
 ```
@@ -90,24 +103,27 @@ The installer will:
 
 Log off and log back on again or reboot
 
-### Step 3: Configure Your MAC Address
+### Step 3: Configure Your MAC Address (Bluetooth only)
 
-If you did not provide the MAC address during installation, edit the configuration file and add your TourBox MAC address:
+**Skip this step if you only use USB.**
+
+If you did not provide the MAC address during installation, edit the configuration file:
 
 ```bash
 nano ~/.config/tourbox/mappings.conf
 ```
 
-Find the `[device]` section at the top of the file and set your MAC address:
+Find the `[device]` section and set your MAC address:
 
 ```ini
 [device]
 mac_address = 12:34:56:78:9A:BC  # Replace with your actual MAC address
+# usb_port = /dev/ttyACM0        # Optional: only if using non-default USB port
 ```
 
 Save the file (Ctrl+O, Enter, Ctrl+X in nano).
 
-You will need to log out and log back in or reboot to activate the driver after installation.
+Log out and log back in or reboot to activate the driver.
 
 ### Additional Step for KDE Plasma Users
 
@@ -184,7 +200,7 @@ You can also run it from the Application Launcher or pin it to your Application 
 - **Visual Configuration** - See a diagram of your TourBox with with visual feedback while editing control mappings
 - **Profile Management** - Create, edit, and delete application-specific profiles
 - **Window Matching** - Use "Capture Active Window" to detect windows for application profile matching
-- **Test Mode** - Test your button mappings in your applications without having to quit the configuration GUI
+- **Testing** - Test your button mappings in your applications without having to quit the configuration GUI
 - **Easy Key Assignment** - Point-and-click interface for keyboard shortcuts and mouse wheel actions
 
 **📖 See the [Complete GUI User Guide](docs/GUI_USER_GUIDE.md) for detailed instructions, tutorials, and troubleshooting.**
@@ -236,7 +252,10 @@ echo "uinput" | sudo tee /etc/modules-load.d/uinput.conf
 sudo usermod -a -G input $USER
 # You'll need to log out and back in for this to take effect
 
-# 7. Set up systemd service
+# 7. Add user to dialout group (for USB access)
+sudo usermod -a -G dialout $USER
+
+# 8. Set up systemd service
 mkdir -p ~/.config/systemd/user
 nano ~/.config/systemd/user/tourbox.service
 # Add the following content (replace /path/to/tourboxelite with actual path):
@@ -247,14 +266,14 @@ nano ~/.config/systemd/user/tourbox.service
 #
 # [Service]
 # Type=simple
-# ExecStart=/path/to/tourboxelite/venv/bin/python -m tourboxelite.device_ble
+# ExecStart=/path/to/tourboxelite/venv/bin/python -m tourboxelite
 # Restart=on-failure
 # RestartSec=5
 #
 # [Install]
 # WantedBy=default.target
 
-# 8. Enable and start service
+# 9. Enable and start service
 systemctl --user daemon-reload
 systemctl --user enable tourbox
 systemctl --user start tourbox
@@ -336,7 +355,7 @@ systemctl --user restart tourbox
 
 ### Manual Testing
 
-Before running the driver manually, you must stop the systemd service first (otherwise it will conflict with the manual instance):
+Before running the driver manually, you must stop the systemd service first:
 
 ```bash
 # Stop the service
@@ -345,8 +364,12 @@ systemctl --user stop tourbox
 # Navigate to the tourboxelite directory
 cd /path/to/tourboxelite
 
-# Run directly in terminal with verbose logging
-./venv/bin/python -m tourboxelite.device_ble -v
+# Run directly in terminal with verbose logging (auto-detects USB/BLE)
+./venv/bin/python -m tourboxelite -v
+
+# Or force a specific connection mode:
+./venv/bin/python -m tourboxelite --usb -v   # Force USB
+./venv/bin/python -m tourboxelite --ble -v   # Force Bluetooth
 ```
 
 Press `Ctrl+C` to stop.
@@ -383,10 +406,43 @@ journalctl --user -u tourbox -n 50
 ```
 
 Common issues:
-- MAC address not set in config
-- TourBox not powered on or out of range
+- MAC address not set in config (for Bluetooth)
+- TourBox not powered on or out of range (for Bluetooth)
+- USB cable not connected or power-only cable (for USB)
 - Missing Python dependencies
 - Device already connected to another system
+
+### USB not detected
+
+If the driver doesn't detect your USB connection:
+
+```bash
+# Check if any ttyACM devices exist
+ls -la /dev/ttyACM*
+
+# Check if you're in the dialout group
+groups | grep dialout
+
+# If not in dialout group, add yourself:
+sudo usermod -a -G dialout $USER
+# Log out and back in for this to take effect
+```
+
+Make sure you're using a **data cable**, not a power-only charging cable. Try a different USB-C cable if the device doesn't appear.
+
+**If you have multiple USB serial devices** (Arduino, etc.), the TourBox might not be on `/dev/ttyACM0`. The driver automatically scans all `/dev/ttyACM*` devices, but you can also specify the port manually:
+
+```bash
+# Find which port the TourBox is on
+ls -la /dev/ttyACM*
+
+# Run with a specific port
+./venv/bin/python -m tourboxelite --usb --port /dev/ttyACM1
+
+# Or set it in your config file (~/.config/tourbox/mappings.conf):
+# [device]
+# usb_port = /dev/ttyACM1
+```
 
 ### "/dev/uinput" cannot be opened for writing
 
