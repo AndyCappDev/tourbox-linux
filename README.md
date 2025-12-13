@@ -6,6 +6,9 @@
 [![Platform: Linux](https://img.shields.io/badge/platform-linux-lightgrey.svg)](https://www.linux.org/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
+**Author:** Scott Bowman ([AndyCappDev](https://github.com/AndyCappDev))
+**Original Repository:** [github.com/AndyCappDev/tourboxelite](https://github.com/AndyCappDev/tourboxelite)
+
 Linux driver for the TourBox Elite and Elite Plus - a Bluetooth Low Energy (BLE) input device by TourBox Tech Inc. This driver translates BLE input events to Linux input events via evdev/uinput.
 
 > **⚠️ Important:** This driver is for **Bluetooth connections only**. It does **NOT** support USB connections.
