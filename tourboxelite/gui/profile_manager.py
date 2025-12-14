@@ -15,6 +15,7 @@ from PySide6.QtGui import QFont
 
 # Import from existing driver code
 from tourboxelite.config_loader import Profile
+from tourboxelite.haptic import HapticConfig
 
 # Import GUI dialog
 from .profile_settings_dialog import ProfileSettingsDialog
@@ -210,7 +211,7 @@ class ProfileManager(QWidget):
         dialog = ProfileSettingsDialog(self.current_profile, self, is_new=False)
         if dialog.exec() == QDialog.Accepted:
             # Get results
-            name, app_id, window_class = dialog.get_results()
+            name, app_id, window_class, haptic_strength = dialog.get_results()
 
             # Update profile object
             old_name = self.current_profile.name
@@ -219,7 +220,11 @@ class ProfileManager(QWidget):
             self.current_profile.window_class = window_class if window_class else None
             self.current_profile.window_title = None  # No longer used
 
+            # Update haptic config (Phase 1: global setting)
+            self.current_profile.haptic_config.set_global(haptic_strength)
+
             logger.info(f"Profile updated: {self.current_profile}")
+            logger.info(f"  Haptic: {haptic_strength}")
 
             # Reload the list to show updated info
             self._reload_profile_list()

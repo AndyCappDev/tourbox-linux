@@ -17,6 +17,7 @@ from evdev import UInput
 from .device_base import TourBoxBase
 from .config_loader import load_profiles, load_device_config
 from .window_monitor import WaylandWindowMonitor
+from .haptic import build_config_commands, HapticConfig
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +29,8 @@ WRITE_CHAR = "0000fff2-0000-1000-8000-00805f9b34fb"   # Commands to device
 # Unlock sequence discovered from Windows BLE capture
 UNLOCK_COMMAND = bytes.fromhex("5500078894001afe")
 
-# Configuration commands to enable button reporting
-CONFIG_COMMANDS = [
-    bytes.fromhex("b5005d0400050006000700080009000b000c000d"),
-    bytes.fromhex("000e000f0026002700280029003b003c003d003e"),
-    bytes.fromhex("003f004000410042004300440045004600470048"),
-    bytes.fromhex("0049004a004b004c004d004e004f005000510052"),
-    bytes.fromhex("0053005400a800a900aa00ab00fe"),
-]
+# Note: CONFIG_COMMANDS are now built dynamically by build_config_commands()
+# from haptic.py to support per-profile haptic settings
 
 
 class TourBoxBLE(TourBoxBase):
@@ -75,6 +70,29 @@ class TourBoxBLE(TourBoxBase):
         """
         self.process_button_code(data)
 
+    async def send_haptic_config(self):
+        """Send haptic configuration to the device
+
+        Called when profile switches to apply the new profile's haptic settings.
+        """
+        if not self.client or not self.client.is_connected:
+            logger.warning("Cannot send haptic config - not connected")
+            return
+
+        haptic_config = None
+        if self.current_profile and self.current_profile.haptic_config:
+            haptic_config = self.current_profile.haptic_config
+            logger.info(f"Sending haptic config for profile '{self.current_profile.name}': {haptic_config}")
+
+        config_commands = build_config_commands(haptic_config)
+
+        # Send configuration commands
+        for cmd in config_commands:
+            await self.client.write_gatt_char(WRITE_CHAR, cmd, response=False)
+            await asyncio.sleep(0.01)
+
+        logger.info("Haptic configuration sent")
+
     async def unlock_device(self):
         """Send unlock sequence to TourBox Elite
 
@@ -89,10 +107,8 @@ class TourBoxBLE(TourBoxBase):
 
         logger.info("Sending configuration commands...")
 
-        # Send configuration commands
-        for i, cmd in enumerate(CONFIG_COMMANDS, 1):
-            await self.client.write_gatt_char(WRITE_CHAR, cmd, response=False)
-            await asyncio.sleep(0.01)
+        # Send haptic configuration for initial profile
+        await self.send_haptic_config()
 
         logger.info("Device unlocked and configured")
 

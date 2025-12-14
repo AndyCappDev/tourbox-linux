@@ -8,7 +8,7 @@ import logging
 from typing import Optional
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
-    QPushButton, QLabel, QGroupBox, QMessageBox, QProgressDialog
+    QPushButton, QLabel, QGroupBox, QMessageBox, QProgressDialog, QComboBox
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
@@ -16,6 +16,7 @@ from PySide6.QtGui import QFont
 # Import from existing driver code
 from tourboxelite.config_loader import Profile
 from tourboxelite.window_monitor import WaylandWindowMonitor, WindowInfo
+from tourboxelite.haptic import HapticStrength
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ class ProfileSettingsDialog(QDialog):
         self.result_profile_name = profile.name
         self.result_app_id = profile.app_id or ""
         self.result_window_class = profile.window_class or ""
+        self.result_haptic_strength = profile.haptic_config.get_effective_global()
 
         self._init_ui()
         self.setMinimumWidth(500)
@@ -94,6 +96,33 @@ class ProfileSettingsDialog(QDialog):
         matching_layout.addWidget(capture_button)
 
         layout.addWidget(matching_group)
+
+        # Haptic feedback section
+        haptic_group = QGroupBox("Haptic Feedback")
+        haptic_layout = QFormLayout(haptic_group)
+
+        self.haptic_combo = QComboBox()
+        self.haptic_combo.addItem("Off", HapticStrength.OFF)
+        self.haptic_combo.addItem("Weak", HapticStrength.WEAK)
+        self.haptic_combo.addItem("Strong", HapticStrength.STRONG)
+
+        # Set current value from profile
+        current_haptic = self.result_haptic_strength
+        index = self.haptic_combo.findData(current_haptic)
+        if index >= 0:
+            self.haptic_combo.setCurrentIndex(index)
+
+        haptic_layout.addRow("Dial Feedback:", self.haptic_combo)
+
+        haptic_info = QLabel(
+            "Controls vibration feedback for rotary controls (knob, scroll, dial).\n"
+            "Only available on TourBox Elite. Neo models do not have haptic motors."
+        )
+        haptic_info.setWordWrap(True)
+        haptic_info.setStyleSheet("color: #666; font-size: 10px;")
+        haptic_layout.addRow("", haptic_info)
+
+        layout.addWidget(haptic_group)
 
         # Dialog buttons
         button_layout = QHBoxLayout()
@@ -236,6 +265,7 @@ class ProfileSettingsDialog(QDialog):
         self.result_profile_name = name
         self.result_app_id = self.app_id_edit.text().strip()
         self.result_window_class = self.window_class_edit.text().strip()
+        self.result_haptic_strength = self.haptic_combo.currentData()
 
         # Accept the dialog
         self.accept()
@@ -244,10 +274,11 @@ class ProfileSettingsDialog(QDialog):
         """Get the edited profile settings
 
         Returns:
-            Tuple of (name, app_id, window_class)
+            Tuple of (name, app_id, window_class, haptic_strength)
         """
         return (
             self.result_profile_name,
             self.result_app_id,
-            self.result_window_class
+            self.result_window_class,
+            self.result_haptic_strength
         )

@@ -1,7 +1,7 @@
 # TourBox Elite Configuration GUI - User Guide
 
-**Version:** 1.1
-**Last Updated:** 2025-11-12
+**Version:** 1.2
+**Last Updated:** 2025-12-14
 
 ## Table of Contents
 
@@ -12,9 +12,10 @@
 5. [Working with Profiles](#working-with-profiles)
 6. [Configuring Button Mappings](#configuring-button-mappings)
 7. [Using Modifier Buttons](#using-modifier-buttons)
-8. [Tips & Tricks](#tips--tricks)
-9. [Checking for Updates](#checking-for-updates)
-10. [Troubleshooting](#troubleshooting)
+8. [Configuring Haptic Feedback](#configuring-haptic-feedback)
+9. [Tips & Tricks](#tips--tricks)
+10. [Checking for Updates](#checking-for-updates)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -25,6 +26,7 @@ The TourBox Elite Configuration GUI is a graphical application that lets you con
 - **Visually configure** all 20 controls (buttons, dials, scroll wheel, knob)
 - **Create over 250 unique key combinations per profile** using modifier buttons
 - **Create application-specific profiles** that automatically switch based on the active window
+- **Configure haptic feedback** for rotary controls (knob, scroll wheel, dial)
 - **Manage multiple profiles** with an intuitive interface
 - **Test configurations** without leaving the Configuration GUI
 
@@ -586,6 +588,98 @@ Here's a complete example showing how to set up a modifier-heavy workflow:
 2. Print a reference card with your most-used combinations
 3. Start with fewer combinations and add more gradually
 4. Group related functions under the same modifier
+
+---
+
+## Configuring Haptic Feedback
+
+### What is Haptic Feedback?
+
+The TourBox Elite has built-in haptic motors that provide vibration feedback when you rotate the knob, scroll wheel, or dial. This tactile feedback helps you feel each "click" or detent as you rotate, making it easier to make precise adjustments without looking at the screen.
+
+> **Note:** Haptic feedback is only available on the TourBox Elite and Elite Plus. The TourBox Neo does not have haptic motors.
+
+### Haptic Strength Options
+
+You can configure haptic feedback to one of three strengths:
+
+- **Off** - No vibration feedback
+- **Weak** - Subtle vibration, good for quiet environments
+- **Strong** - More pronounced vibration, easier to feel
+
+### Setting Profile-Wide Haptic Feedback
+
+Each profile can have its own haptic setting. This is useful if you want different feedback for different applications (e.g., strong feedback for photo editing, off for video calls).
+
+**To set haptic feedback for a profile:**
+
+1. **Select the profile** in the Profiles list
+2. Click the **"⚙"** (settings) button to open Profile Settings
+3. Find the **"Haptic Feedback"** section
+4. Select your preferred strength from the **"Dial Feedback"** dropdown
+5. Click **"Apply"**
+6. Click **"Save"** (Ctrl+S) to write changes to config
+
+The haptic setting applies to all three rotary controls (knob, scroll wheel, dial) in that profile.
+
+### Setting Per-Dial Haptic Feedback
+
+For more granular control, you can set different haptic strengths for each individual dial. This is configured when editing a rotary control.
+
+**To set haptic for a specific dial:**
+
+1. **Select a rotary control** in the Controls Configuration table
+   - Choose one of: `scroll_up`, `scroll_down`, `knob_cw`, `knob_ccw`, `dial_cw`, or `dial_ccw`
+2. In the Control Editor, you'll see a **"Haptic Feedback"** section
+3. Select your preferred strength:
+   - **Use Profile Default** - Uses the profile's global haptic setting
+   - **Off** / **Weak** / **Strong** - Overrides the profile setting for this dial
+4. Click **"Apply"**
+5. Click **"Save"** (Ctrl+S)
+
+**Example use case:** You might want strong feedback on the scroll wheel for zooming, but no feedback on the dial for timeline scrubbing in video editing.
+
+### Haptic for Modifier Combinations
+
+When you create a modifier combination that uses a rotary control (e.g., `side + knob_cw`), you can also set a custom haptic strength for that specific combination.
+
+**To set haptic for a modifier+rotary combination:**
+
+1. **Select the modifier button** (e.g., "side")
+2. In the **Modifier Combinations** table, click **"Add Combination"** or edit an existing one
+3. **Select a rotary control** as the target (e.g., `knob_cw`)
+4. The **"Haptic Feedback"** section appears in the dialog
+5. Select your preferred strength
+6. Click **"OK"**, then **"Apply"**, then **"Save"**
+
+This allows you to have different haptic feedback depending on whether you're using the dial alone or with a modifier button held.
+
+### Haptic Configuration Hierarchy
+
+Haptic settings are applied in this priority order (highest to lowest):
+
+1. **Per-combo setting** - Modifier + rotary combination (e.g., `side + knob_cw`)
+2. **Per-dial setting** - Individual dial override (e.g., just `knob`)
+3. **Profile global setting** - Profile-wide haptic setting
+4. **Default** - Off (if nothing is configured)
+
+### Tips for Haptic Configuration
+
+**1. Start with a global setting**
+- Set a profile-wide haptic strength first
+- Only add per-dial overrides if you need different behavior
+
+**2. Consider your environment**
+- Use "Weak" in quiet offices or during video calls
+- Use "Strong" when you need precise tactile feedback
+
+**3. Match haptic to function**
+- Strong feedback for coarse adjustments (scrolling, zooming)
+- Weak or off for fine adjustments (brush size, timeline scrubbing)
+
+**4. Test with your applications**
+- Save and test your haptic settings in your actual workflow
+- Adjust based on what feels natural for each use case
 
 ---
 

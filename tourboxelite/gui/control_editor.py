@@ -16,6 +16,7 @@ from PySide6.QtCore import Signal, Qt
 from evdev import ecodes as e
 from tourboxelite.config_loader import VALID_MODIFIER_BUTTONS
 from tourboxelite.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER, TEXT_EDIT_HEIGHT_MULTIPLIER
+from tourboxelite.haptic import HapticStrength
 
 logger = logging.getLogger(__name__)
 
@@ -123,15 +124,27 @@ ALL_CONTROLS = [
     'dial_cw', 'dial_ccw', 'dial_click',
 ]
 
+# Rotary controls that have haptic feedback - maps control name to dial name
+ROTARY_TO_DIAL = {
+    'scroll_up': 'scroll',
+    'scroll_down': 'scroll',
+    'knob_cw': 'knob',
+    'knob_ccw': 'knob',
+    'dial_cw': 'dial',
+    'dial_ccw': 'dial',
+}
+
 
 class ComboConfigDialog(QDialog):
     """Dialog for configuring a modifier combination"""
 
     def __init__(self, parent=None, modifier_name: str = "", control_name: str = "",
-                 action: str = "", comment: str = "", exclude_controls: set = None):
+                 action: str = "", comment: str = "", exclude_controls: set = None,
+                 haptic_strength: HapticStrength = None):
         super().__init__(parent)
         self.setWindowTitle("Configure Modifier Combination")
         self.setMinimumWidth(500)
+        self.result_haptic = haptic_strength  # Track haptic setting
 
         layout = QVBoxLayout(self)
 
@@ -293,6 +306,42 @@ class ComboConfigDialog(QDialog):
         self.comment_text.setPlainText(comment)
         layout.addWidget(self.comment_text)
 
+        # Haptic feedback group (only for rotary controls)
+        self.haptic_group = QGroupBox("Haptic Feedback")
+        haptic_layout = QVBoxLayout(self.haptic_group)
+
+        haptic_row = QHBoxLayout()
+        haptic_row.addWidget(QLabel("Strength:"))
+        self.haptic_combo = QComboBox()
+        self.haptic_combo.addItem("Use Profile Default", None)
+        self.haptic_combo.addItem("Off", HapticStrength.OFF)
+        self.haptic_combo.addItem("Weak", HapticStrength.WEAK)
+        self.haptic_combo.addItem("Strong", HapticStrength.STRONG)
+        # Set minimum height based on font metrics
+        fm_haptic = self.haptic_combo.fontMetrics()
+        self.haptic_combo.setMinimumHeight(int(fm_haptic.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER))
+        # Set initial value
+        if haptic_strength is not None:
+            index = self.haptic_combo.findData(haptic_strength)
+            if index >= 0:
+                self.haptic_combo.setCurrentIndex(index)
+        haptic_row.addWidget(self.haptic_combo)
+        haptic_row.addStretch()
+        haptic_layout.addLayout(haptic_row)
+
+        haptic_info = QLabel(
+            "Haptic feedback for this modifier+dial combination."
+        )
+        haptic_info.setWordWrap(True)
+        haptic_info.setStyleSheet("color: #666; font-size: 10px;")
+        haptic_layout.addWidget(haptic_info)
+
+        layout.addWidget(self.haptic_group)
+        self.haptic_group.hide()  # Hidden by default, shown when rotary control selected
+
+        # Connect control selection to update haptic visibility
+        self.control_combo.currentTextChanged.connect(self._on_control_changed)
+
         # Dialog buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
@@ -302,6 +351,10 @@ class ComboConfigDialog(QDialog):
         # Parse and populate if editing existing combo
         if action:
             self._parse_and_populate(action)
+
+        # Show haptic if editing existing rotary control
+        if control_name and control_name in ROTARY_TO_DIAL:
+            self.haptic_group.show()
 
     def _on_action_type_changed(self, action_type: str):
         """Handle action type change"""
@@ -314,6 +367,13 @@ class ComboConfigDialog(QDialog):
         else:  # None
             self.keyboard_group.hide()
             self.mouse_group.hide()
+
+    def _on_control_changed(self, control_name: str):
+        """Handle control selection change - show/hide haptic for rotary controls"""
+        if control_name in ROTARY_TO_DIAL:
+            self.haptic_group.show()
+        else:
+            self.haptic_group.hide()
 
     def _on_key_input_changed(self, text: str):
         """Handle key input text change - clear special key dropdown"""
@@ -443,6 +503,10 @@ class ComboConfigDialog(QDialog):
         """Get comment text"""
         return self.comment_text.toPlainText().strip()
 
+    def get_haptic(self) -> Optional[HapticStrength]:
+        """Get haptic setting (None = use profile default)"""
+        return self.haptic_combo.currentData()
+
 
 class ControlEditor(QWidget):
     """Widget for editing a control's action"""
@@ -452,10 +516,14 @@ class ControlEditor(QWidget):
     comment_changed = Signal(str, str)  # control_name, comment
     modifier_config_changed = Signal(str, dict)  # control_name, modifier_config
     combo_selected = Signal(str)  # combo_control_name (control selected from Modifier Combinations table)
+    haptic_changed = Signal(str, object)  # dial_name ('knob'/'scroll'/'dial'), HapticStrength or None
+    combo_haptic_changed = Signal(str, str, object)  # modifier_name, dial_name, HapticStrength or None
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_control = None
+        self.current_dial = None  # Track which dial we're editing (for haptic)
+        self.combo_haptics = {}  # Track haptic settings for combos: (modifier, dial) -> HapticStrength
         self._init_ui()
 
     def _init_ui(self):
@@ -590,6 +658,34 @@ class ControlEditor(QWidget):
         layout.addWidget(self.mouse_group)
         self.mouse_group.hide()  # Hidden by default
 
+        # Haptic feedback group (only for rotary controls)
+        self.haptic_group = QGroupBox("Haptic Feedback")
+        haptic_layout = QVBoxLayout(self.haptic_group)
+
+        haptic_row = QHBoxLayout()
+        haptic_row.addWidget(QLabel("Strength:"))
+        self.haptic_combo = QComboBox()
+        self.haptic_combo.addItem("Use Profile Default", None)
+        self.haptic_combo.addItem("Off", HapticStrength.OFF)
+        self.haptic_combo.addItem("Weak", HapticStrength.WEAK)
+        self.haptic_combo.addItem("Strong", HapticStrength.STRONG)
+        # Set minimum height based on font metrics
+        fm_haptic = self.haptic_combo.fontMetrics()
+        self.haptic_combo.setMinimumHeight(int(fm_haptic.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER))
+        haptic_row.addWidget(self.haptic_combo)
+        haptic_row.addStretch()
+        haptic_layout.addLayout(haptic_row)
+
+        haptic_info = QLabel(
+            "Per-dial haptic setting. 'Use Profile Default' uses the profile's global setting."
+        )
+        haptic_info.setWordWrap(True)
+        haptic_info.setStyleSheet("color: #666; font-size: 10px;")
+        haptic_layout.addWidget(haptic_info)
+
+        layout.addWidget(self.haptic_group)
+        self.haptic_group.hide()  # Hidden by default, shown for rotary controls
+
         # Comment/Notes field (visible for non-modifier controls)
         self.comment_group = QGroupBox("Comment")
         comment_layout = QVBoxLayout(self.comment_group)
@@ -668,7 +764,8 @@ class ControlEditor(QWidget):
         # Initially disabled
         self.setEnabled(False)
 
-    def load_control(self, control_name: str, current_action: str, comment: str = "", modifier_combos: dict = None):
+    def load_control(self, control_name: str, current_action: str, comment: str = "",
+                     modifier_combos: dict = None, haptic_strength: Optional[HapticStrength] = None):
         """Load a control for editing
 
         Args:
@@ -676,13 +773,28 @@ class ControlEditor(QWidget):
             current_action: Current action string (e.g., 'KEY_LEFTCTRL+KEY_C')
             comment: Optional comment/notes for this control
             modifier_combos: Dict of control_name -> (action, comment) for combos (optional)
+            haptic_strength: Current haptic strength for rotary controls (None = use profile default)
         """
         self.current_control = control_name
+        self.current_dial = ROTARY_TO_DIAL.get(control_name)  # None for non-rotary
         self.control_label.setText(f"Editing: {control_name}")
         self.setEnabled(True)
 
         # Load comment
         self.comment_text.setPlainText(comment)
+
+        # Show/hide haptic group based on whether this is a rotary control
+        if self.current_dial:
+            self.haptic_group.show()
+            # Set haptic combo to current value
+            if haptic_strength is None:
+                self.haptic_combo.setCurrentIndex(0)  # "Use Profile Default"
+            else:
+                index = self.haptic_combo.findData(haptic_strength)
+                if index >= 0:
+                    self.haptic_combo.setCurrentIndex(index)
+        else:
+            self.haptic_group.hide()
 
         # Parse and populate the action UI
         self._parse_and_populate(current_action)
@@ -862,6 +974,12 @@ class ControlEditor(QWidget):
         comment = self.comment_text.toPlainText().strip()
         self.comment_changed.emit(self.current_control, comment)
 
+        # Emit haptic change for rotary controls
+        if self.current_dial:
+            haptic_strength = self.haptic_combo.currentData()  # None or HapticStrength
+            self.haptic_changed.emit(self.current_dial, haptic_strength)
+            logger.info(f"Apply haptic: {self.current_dial} -> {haptic_strength}")
+
         # If this is a physical button, check if there are modifier combinations
         if self.current_control in VALID_MODIFIER_BUTTONS:
             # Extract combos from table
@@ -978,9 +1096,16 @@ class ControlEditor(QWidget):
             control = dialog.get_control()
             action = dialog.get_action()
             comment = dialog.get_comment()
+            haptic = dialog.get_haptic()
 
             if control and action and action != "none":
                 self._add_combo_row(control, action, comment)
+
+                # Emit haptic change if this is a rotary control combo
+                dial_name = ROTARY_TO_DIAL.get(control)
+                if dial_name:
+                    self.combo_haptic_changed.emit(self.current_control, dial_name, haptic)
+                    self.combo_haptics[(self.current_control, dial_name)] = haptic
 
     def _on_edit_combo(self, row: int):
         """Handle Edit button click for a combination"""
@@ -993,6 +1118,12 @@ class ControlEditor(QWidget):
         action = action_item.data(Qt.UserRole) if action_item else ""  # Get raw action string
         comment = comment_item.text() if comment_item else ""
 
+        # Get current haptic setting for this combo (if it's a rotary)
+        dial_name = ROTARY_TO_DIAL.get(control)
+        current_haptic = None
+        if dial_name:
+            current_haptic = self.combo_haptics.get((self.current_control, dial_name))
+
         # Get list of already-used controls (excluding the one being edited)
         used_controls = set()
         for r in range(self.combos_table.rowCount()):
@@ -1004,11 +1135,12 @@ class ControlEditor(QWidget):
         # Open dialog with current values
         dialog = ComboConfigDialog(self, modifier_name=self.current_control,
                                    control_name=control, action=action, comment=comment,
-                                   exclude_controls=used_controls)
+                                   exclude_controls=used_controls, haptic_strength=current_haptic)
         if dialog.exec() == QDialog.Accepted:
             new_control = dialog.get_control()
             new_action = dialog.get_action()
             new_comment = dialog.get_comment()
+            new_haptic = dialog.get_haptic()
 
             if new_control and new_action and new_action != "none":
                 # Update row
@@ -1020,6 +1152,12 @@ class ControlEditor(QWidget):
                 action_item.setData(Qt.UserRole, new_action)
 
                 comment_item.setText(new_comment)
+
+                # Emit haptic change if this is a rotary control combo
+                new_dial_name = ROTARY_TO_DIAL.get(new_control)
+                if new_dial_name:
+                    self.combo_haptic_changed.emit(self.current_control, new_dial_name, new_haptic)
+                    self.combo_haptics[(self.current_control, new_dial_name)] = new_haptic
 
     def _add_combo_row(self, control_name: str, action: str, comment: str, select: bool = True):
         """Add a row to the combinations table

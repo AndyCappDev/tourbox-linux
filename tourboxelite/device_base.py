@@ -434,23 +434,40 @@ class TourBoxBase(ABC):
             logger.error(f"Error reloading config: {ex}", exc_info=True)
             print(f"Error reloading config: {ex}")
 
+    async def send_haptic_config(self):
+        """Send haptic configuration to device
+
+        Override in subclasses (BLE, USB) to send the current profile's
+        haptic settings to the device. Called when profile switches.
+
+        This is a no-op in the base class - subclasses implement the
+        transport-specific logic.
+        """
+        pass
+
     async def on_window_change(self, window_info):
         """Handle window focus changes
 
         Args:
             window_info: WindowInfo object with current window details
         """
+        old_profile = self.current_profile
+
         # Find matching profile
         for profile in self.profiles:
             if profile.matches(window_info):
                 if profile != self.current_profile:
                     self.switch_profile(profile)
-                return
+                break
+        else:
+            # No match - switch to default profile
+            default_profile = next((p for p in self.profiles if p.name == 'default'), None)
+            if default_profile and default_profile != self.current_profile:
+                self.switch_profile(default_profile)
 
-        # No match - switch to default profile
-        default_profile = next((p for p in self.profiles if p.name == 'default'), None)
-        if default_profile and default_profile != self.current_profile:
-            self.switch_profile(default_profile)
+        # Send haptic config if profile changed
+        if self.current_profile != old_profile:
+            await self.send_haptic_config()
 
     def clear_modifier_state(self):
         """Clear all modifier state - call on disconnect to prevent stuck keys"""

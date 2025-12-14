@@ -1,6 +1,6 @@
 # TourBox Elite / Elite Plus Linux Driver
 
-**Version 2.1.0**
+**Version 2.2.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Linux](https://img.shields.io/badge/platform-linux-lightgrey.svg)](https://www.linux.org/)
@@ -20,6 +20,7 @@ Linux driver for the TourBox Elite and Elite Plus by TourBox Tech Inc. This driv
 - ✅ **Window Detection** - Automatic profile switching based on focused window
 - ✅ **Full Button Mapping** - All 20 controls configurable (buttons, knobs, scroll wheel, dial)
 - ✅ **Modifier Keys** - Create over 250 unique key combinations per profile using physical buttons as modifiers
+- ✅ **Haptic Feedback** - Configurable vibration feedback for rotary controls (knob, scroll, dial)
 - ✅ **Systemd Integration** - Runs as a user service, starts on login
 - ✅ **Update Checker** - Check for new versions from within the GUI
 
@@ -328,6 +329,22 @@ knob_cw = KEY_LEFTCTRL+KEY_EQUAL    # Zoom in
 ```
 
 **Note:** On X11, only `[profile:default]` is used. App-specific profiles require Wayland.
+
+### Haptic Feedback
+
+The TourBox Elite has built-in haptic motors that provide vibration feedback when rotating the knob, scroll wheel, or dial. You can configure haptic strength per profile:
+
+```ini
+[profile:default]
+haptic = strong    # off, weak, or strong
+
+# Per-dial settings (optional, overrides global)
+haptic.knob = weak
+haptic.scroll = strong
+haptic.dial = off
+```
+
+Configure haptic settings via the GUI (Profile Settings dialog) or edit the config file directly. Haptic feedback is only available on TourBox Elite - the Neo model does not have haptic motors.
 
 After editing, restart the service:
 ```bash

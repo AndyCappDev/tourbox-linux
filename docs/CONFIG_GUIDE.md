@@ -284,6 +284,80 @@ knob_click = none               # Disable this button
 
 ---
 
+## Haptic Feedback Configuration
+
+The TourBox Elite has haptic motors that provide vibration feedback when rotating the knob, scroll wheel, or dial. You can configure haptic strength in the config file.
+
+> **Note:** Haptic feedback is only available on TourBox Elite and Elite Plus. The TourBox Neo does not have haptic motors.
+
+### Global Haptic Setting (Per Profile)
+
+Set haptic strength for all rotary controls in a profile:
+
+```ini
+[profile:default]
+haptic = strong    # Options: off, weak, strong
+```
+
+### Per-Dial Haptic Settings
+
+Override the global setting for specific dials:
+
+```ini
+[profile:default]
+haptic = weak              # Global setting
+haptic.knob = strong       # Override for knob only
+haptic.scroll = off        # Override for scroll wheel
+haptic.dial = weak         # Override for dial (same as global, so optional)
+```
+
+### Per-Modifier-Combo Haptic Settings
+
+Set haptic strength for specific modifier+dial combinations:
+
+```ini
+[profile:default]
+haptic = weak                   # Global setting
+haptic.knob = strong            # Knob alone uses strong
+haptic.knob.side = off          # side + knob uses no haptic
+haptic.scroll.tall = strong     # tall + scroll uses strong
+```
+
+### Haptic Priority Order
+
+When determining haptic strength for a rotary event, the driver checks in this order:
+
+1. **Per-combo setting** (`haptic.dial.modifier`) - Most specific
+2. **Per-dial setting** (`haptic.dial`) - Dial-specific override
+3. **Global setting** (`haptic`) - Profile-wide default
+4. **Default** - Off (if nothing configured)
+
+### Haptic Strength Values
+
+| Value | Description |
+|-------|-------------|
+| `off` | No vibration feedback |
+| `weak` | Subtle vibration |
+| `strong` | Pronounced vibration |
+
+### Example: Complete Haptic Configuration
+
+```ini
+[profile:photo_editing]
+window_class = gimp
+haptic = strong                 # Default: strong feedback
+
+# Override for specific use cases
+haptic.dial = weak              # Dial for fine adjustments
+haptic.knob.tall = off          # No haptic when using tall+knob
+
+# Button mappings...
+scroll_up = KEY_LEFTCTRL+KEY_EQUAL
+scroll_down = KEY_LEFTCTRL+KEY_MINUS
+```
+
+---
+
 ## Available Key Names
 
 ### Modifier Keys

@@ -17,6 +17,7 @@ import serial
 from .device_base import TourBoxBase
 from .config_loader import load_profiles, load_device_config
 from .window_monitor import WaylandWindowMonitor
+from .haptic import build_config_message_usb, HapticConfig
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +27,14 @@ DEFAULT_USB_PORT = "/dev/ttyACM0"
 # Unlock command (same as BLE)
 UNLOCK_COMMAND = bytes.fromhex("5500078894001afe")
 
-# Configuration commands (same as BLE, sent as one combined message)
-CONFIG_COMMANDS = bytes.fromhex(
-    "b5005d0400050006000700080009000b000c000d"
-    "000e000f0026002700280029003b003c003d003e"
-    "003f004000410042004300440045004600470048"
-    "0049004a004b004c004d004e004f005000510052"
-    "0053005400a800a900aa00ab00fe"
-)
+# Note: CONFIG_COMMANDS are now built dynamically by build_config_message_usb()
+# from haptic.py to support per-profile haptic settings
+
+# USB Device identification for Elite vs Neo detection
+# TourBox uses STMicroelectronics VID with different PIDs
+USB_VID = 0x0483  # STMicroelectronics
+USB_PID_ELITE = 0x5741  # Confirmed Elite
+USB_PID_AMBIGUOUS = 0x5740  # Could be Neo or early Elite firmware
 
 
 class TourBoxUSB(TourBoxBase):
@@ -46,13 +47,15 @@ class TourBoxUSB(TourBoxBase):
     The USB protocol uses the same single-byte button codes as BLE.
     """
 
-    def __init__(self, port: str = None, pidfile: Optional[str] = None, config_path: Optional[str] = None):
+    def __init__(self, port: str = None, pidfile: Optional[str] = None,
+                 config_path: Optional[str] = None, force_haptics: bool = False):
         """Initialize the USB driver
 
         Args:
             port: Serial port path (default: /dev/ttyACM0)
             pidfile: Path to PID file
             config_path: Path to configuration file
+            force_haptics: Force enable haptics even for ambiguous device PIDs
         """
         super().__init__(pidfile=pidfile, config_path=config_path)
         self.port = port or DEFAULT_USB_PORT
@@ -60,6 +63,35 @@ class TourBoxUSB(TourBoxBase):
         self.reconnect_delay = 5.0
         self._read_task: Optional[asyncio.Task] = None
         self._connected = False
+        self.force_haptics = force_haptics
+        self.haptics_enabled = True  # Will be set based on device detection
+
+    async def send_haptic_config(self):
+        """Send haptic configuration to the device
+
+        Called when profile switches to apply the new profile's haptic settings.
+        """
+        if not self.serial or not self.serial.is_open:
+            logger.warning("Cannot send haptic config - not connected")
+            return
+
+        if not self.haptics_enabled:
+            logger.debug("Haptics disabled for this device, skipping config send")
+            return
+
+        haptic_config = None
+        if self.current_profile and self.current_profile.haptic_config:
+            haptic_config = self.current_profile.haptic_config
+            logger.info(f"Sending haptic config for profile '{self.current_profile.name}': {haptic_config}")
+
+        config_message = build_config_message_usb(haptic_config)
+
+        # Send configuration
+        self.serial.write(config_message)
+        self.serial.flush()
+        await asyncio.sleep(0.05)
+
+        logger.info("Haptic configuration sent")
 
     async def connect(self) -> bool:
         """Connect to TourBox Elite via USB serial
@@ -98,13 +130,11 @@ class TourBoxUSB(TourBoxBase):
             else:
                 logger.warning("No response to unlock command")
 
-            # Send configuration
-            logger.info("Sending configuration...")
-            self.serial.write(CONFIG_COMMANDS)
-            self.serial.flush()
-            await asyncio.sleep(0.1)
-
             self._connected = True
+
+            # Send haptic configuration for initial profile
+            await self.send_haptic_config()
+
             logger.info("USB device initialized")
             return True
 
@@ -347,18 +377,24 @@ def main():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    # Get port from: 1) command line, 2) environment, 3) config file, 4) default
+    # Get port and settings from: 1) command line, 2) environment, 3) config file, 4) default
     port = args.port or os.getenv('TOURBOX_USB_PORT')
 
+    # Load device config for port and haptics settings
+    device_config = load_device_config(args.config)
+
     if not port:
-        # Try to load from config file
-        device_config = load_device_config(args.config)
         port = device_config.get('usb_port', DEFAULT_USB_PORT)
 
+    # Check for force_haptics setting (for Neo vs Elite ambiguous PIDs)
+    force_haptics = device_config.get('force_haptics', False)
+
     logger.info(f"Using USB port: {port}")
+    if force_haptics:
+        logger.info("force_haptics enabled in config")
 
     # Create and start driver
-    driver = TourBoxUSB(port=port, config_path=args.config)
+    driver = TourBoxUSB(port=port, config_path=args.config, force_haptics=force_haptics)
 
     try:
         asyncio.run(driver.start())

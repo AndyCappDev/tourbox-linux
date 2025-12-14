@@ -15,6 +15,8 @@ from typing import Dict, List, Tuple, Optional, Set
 from dataclasses import dataclass, field
 from evdev import ecodes as e
 
+from .haptic import HapticConfig, HapticStrength
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,6 +38,9 @@ class Profile:
     # NEW FIELDS FOR COMMENTS
     mapping_comments: Dict[str, str] = field(default_factory=dict)  # control -> comment
     modifier_combo_comments: Dict[Tuple[str, str], str] = field(default_factory=dict)  # (modifier, control) -> comment
+
+    # Haptic feedback configuration
+    haptic_config: HapticConfig = field(default_factory=HapticConfig.default_off)
 
     def matches(self, window_info) -> bool:
         """Check if this profile matches the given window info"""
@@ -286,6 +291,10 @@ def load_device_config(config_path: str = None) -> Dict[str, str]:
             device_config['mac_address'] = config['device']['mac_address'].strip()
         if 'usb_port' in config['device']:
             device_config['usb_port'] = config['device']['usb_port'].strip()
+        if 'force_haptics' in config['device']:
+            # Parse boolean value
+            force_val = config['device']['force_haptics'].strip().lower()
+            device_config['force_haptics'] = force_val in ('true', 'yes', '1', 'on')
 
     return device_config
 
@@ -386,6 +395,9 @@ def load_profiles(config_path: str = None) -> List[Profile]:
             # Parse comments
             mapping_comments, modifier_combo_comments = parse_mapping_comments(config, section)
 
+            # Parse haptic configuration
+            haptic_config = parse_haptic_config(config, section)
+
             # Add modifier combo actions to capabilities
             for action_str in modifier_mappings.values():
                 events = parse_action(action_str)
@@ -427,7 +439,8 @@ def load_profiles(config_path: str = None) -> List[Profile]:
                 modifier_mappings=modifier_mappings,
                 modifier_base_actions=modifier_base_actions,
                 mapping_comments=mapping_comments,
-                modifier_combo_comments=modifier_combo_comments
+                modifier_combo_comments=modifier_combo_comments,
+                haptic_config=haptic_config
             )
 
             profiles.append(profile)
@@ -436,6 +449,8 @@ def load_profiles(config_path: str = None) -> List[Profile]:
                 logger.info(f"  Modifiers: {', '.join(modifier_buttons)}")
             if modifier_mappings:
                 logger.info(f"  Modifier combos: {len(modifier_mappings)}")
+            if haptic_config.global_setting is not None:
+                logger.info(f"  Haptic: {haptic_config.global_setting}")
 
     return profiles
 
@@ -620,6 +635,55 @@ def parse_mapping_comments(config: configparser.ConfigParser, section_name: str)
             logger.debug(f"Found comment for {control_key}: {comment_text[:50]}...")
 
     return mapping_comments, modifier_combo_comments
+
+
+def parse_haptic_config(config: configparser.ConfigParser, section_name: str) -> HapticConfig:
+    """Parse haptic configuration from a profile section
+
+    Supports both Phase 1 (global) and Phase 2 (per-dial, per-combo) formats:
+    - Phase 1: haptic = weak
+    - Phase 2: haptic.knob = strong, haptic.knob.tall = weak
+
+    Args:
+        config: ConfigParser instance
+        section_name: Name of the section (e.g., 'profile:default')
+
+    Returns:
+        HapticConfig with parsed settings
+    """
+    haptic_config = HapticConfig()
+    has_per_dial_settings = False
+
+    for key, value in config[section_name].items():
+        if key == 'haptic':
+            # Global profile haptic setting (Phase 1)
+            haptic_config.global_setting = HapticStrength.from_string(value)
+            logger.debug(f"Parsed global haptic: {value} -> {haptic_config.global_setting}")
+
+        elif key.startswith('haptic.'):
+            parts = key.split('.')
+            if len(parts) == 2:
+                # Per-dial: haptic.knob = weak
+                dial = parts[1]
+                strength = HapticStrength.from_string(value)
+                haptic_config.dial_settings[dial] = strength
+                has_per_dial_settings = True
+                logger.debug(f"Parsed dial haptic: {dial} = {strength}")
+
+            elif len(parts) == 3:
+                # Per-combo: haptic.knob.tall = strong
+                dial, modifier = parts[1], parts[2]
+                strength = HapticStrength.from_string(value)
+                haptic_config.combo_settings[(dial, modifier)] = strength
+                has_per_dial_settings = True
+                logger.debug(f"Parsed combo haptic: {dial}.{modifier} = {strength}")
+
+    # If per-dial/per-combo settings exist, clear global_setting to enable Phase 2 mode
+    if has_per_dial_settings and haptic_config.global_setting is not None:
+        logger.info("Per-dial haptic settings found, switching to Phase 2 mode (ignoring global)")
+        haptic_config.global_setting = None
+
+    return haptic_config
 
 
 def get_default_mapping():

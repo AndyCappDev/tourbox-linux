@@ -13,6 +13,7 @@ from datetime import datetime
 from evdev import ecodes as e
 
 from tourboxelite.config_loader import get_config_path, BUTTON_CODES, Profile
+from tourboxelite.haptic import HapticStrength
 
 logger = logging.getLogger(__name__)
 
@@ -494,6 +495,123 @@ def save_mapping_comments(profile: Profile) -> bool:
 
     except Exception as e:
         logger.error(f"Error saving comments: {e}", exc_info=True)
+        return False
+
+
+def save_haptic_config(profile: Profile) -> bool:
+    """Save haptic configuration to config file
+
+    Handles the global haptic setting (Phase 1). For Phase 2, this will be
+    extended to handle per-dial and per-combo settings.
+
+    Args:
+        profile: Profile object with haptic configuration
+
+    Returns:
+        True if save succeeded, False otherwise
+    """
+    config_path = get_config_path()
+
+    if not config_path:
+        logger.error("No config file found")
+        return False
+
+    try:
+        # Create backup first
+        backup_path = f"{config_path}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        shutil.copy2(config_path, backup_path)
+        logger.info(f"Created backup: {backup_path}")
+
+        # Read file as lines to preserve comments and formatting
+        with open(config_path, 'r') as f:
+            lines = f.readlines()
+
+        # Find the profile section
+        section_name = f"[profile:{profile.name}]"
+        section_start = -1
+        section_end = -1
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped == section_name:
+                section_start = i
+            elif section_start >= 0 and stripped.startswith('[') and stripped.endswith(']'):
+                section_end = i
+                break
+
+        if section_start < 0:
+            logger.error(f"Profile section {section_name} not found in config")
+            return False
+
+        if section_end < 0:
+            section_end = len(lines)
+
+        # First pass: Remove all old haptic lines
+        i = section_start + 1
+        while i < section_end:
+            line = lines[i]
+            if '=' in line:
+                key = line.split('=')[0].strip()
+                # Remove global haptic and per-dial/per-combo haptic settings
+                if key == 'haptic' or key.startswith('haptic.'):
+                    del lines[i]
+                    section_end -= 1
+                    continue
+            i += 1
+
+        # Second pass: Add new haptic configuration
+        # Find insertion point (after section header and matchers, before mappings)
+        insert_pos = section_start + 1
+
+        # Skip over window matching fields (app_id, window_class, etc.)
+        while insert_pos < section_end:
+            line = lines[insert_pos].strip()
+            if not line or line.startswith('#'):
+                insert_pos += 1
+                continue
+            if '=' in line:
+                key = line.split('=')[0].strip()
+                if key in ('app_id', 'window_class', 'window_title'):
+                    insert_pos += 1
+                    continue
+            break
+
+        # Add global haptic setting if set (Phase 1)
+        if profile.haptic_config.global_setting is not None:
+            haptic_value = str(profile.haptic_config.global_setting)
+            lines.insert(insert_pos, f"haptic = {haptic_value}\n")
+            logger.debug(f"Added haptic = {haptic_value}")
+            insert_pos += 1
+            section_end += 1
+
+        # Phase 2: Add per-dial settings
+        for dial, strength in profile.haptic_config.dial_settings.items():
+            lines.insert(insert_pos, f"haptic.{dial} = {strength}\n")
+            logger.debug(f"Added haptic.{dial} = {strength}")
+            insert_pos += 1
+            section_end += 1
+
+        # Phase 2: Add per-combo settings
+        for (dial, modifier), strength in profile.haptic_config.combo_settings.items():
+            if modifier:
+                lines.insert(insert_pos, f"haptic.{dial}.{modifier} = {strength}\n")
+                logger.debug(f"Added haptic.{dial}.{modifier} = {strength}")
+                insert_pos += 1
+                section_end += 1
+
+        # Write to temporary file first (atomic write)
+        temp_path = f"{config_path}.tmp"
+        with open(temp_path, 'w') as f:
+            f.writelines(lines)
+
+        # Rename temp file to actual config (atomic on POSIX systems)
+        os.replace(temp_path, config_path)
+
+        logger.info(f"Successfully saved haptic config for profile: {profile.name}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error saving haptic config: {e}", exc_info=True)
         return False
 
 

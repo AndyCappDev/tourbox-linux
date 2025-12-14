@@ -15,10 +15,10 @@ from .profile_manager import ProfileManager
 from .controls_list import ControlsList
 from .controller_view import ControllerView
 from .driver_manager import DriverManager
-from .control_editor import ControlEditor
+from .control_editor import ControlEditor, ROTARY_TO_DIAL
 from .config_writer import (save_profile, save_profile_metadata, create_new_profile,
                             profile_exists_in_config, cleanup_old_backups,
-                            save_modifier_config, save_mapping_comments)
+                            save_modifier_config, save_mapping_comments, save_haptic_config)
 
 # Import from existing driver code
 from tourboxelite.config_loader import load_profiles
@@ -43,6 +43,8 @@ class TourBoxConfigWindow(QMainWindow):
         self.modified_mappings = {}  # control_name -> action_string
         self.modified_comments = {}  # control_name -> comment_string
         self.modified_modifiers = {}  # control_name -> modifier_config
+        self.modified_haptic = {}  # dial_name -> HapticStrength (None means use profile default)
+        self.modified_combo_haptic = {}  # (modifier_name, dial_name) -> HapticStrength
         self.is_modified = False
         self.profile_original_names = {}  # Track original names of profiles (for renames)
 
@@ -101,6 +103,8 @@ class TourBoxConfigWindow(QMainWindow):
         self.control_editor.comment_changed.connect(self._on_comment_changed)
         self.control_editor.modifier_config_changed.connect(self._on_modifier_config_changed)
         self.control_editor.combo_selected.connect(self._on_combo_selected)
+        self.control_editor.haptic_changed.connect(self._on_haptic_changed)
+        self.control_editor.combo_haptic_changed.connect(self._on_combo_haptic_changed)
         right_layout.addWidget(self.control_editor, stretch=1)
 
         main_splitter.addWidget(right_widget)
@@ -264,7 +268,11 @@ class TourBoxConfigWindow(QMainWindow):
                     mappings_success = True
                     if self.modified_mappings:
                         mappings_success = save_profile(self.current_profile, self.modified_mappings)
-                    success = metadata_success and mappings_success
+
+                    # Save haptic config
+                    haptic_success = save_haptic_config(self.current_profile)
+
+                    success = metadata_success and mappings_success and haptic_success
 
                 if not success:
                     QMessageBox.critical(
@@ -302,6 +310,10 @@ class TourBoxConfigWindow(QMainWindow):
         # Store current profile and reset modifications
         self.current_profile = profile
         self.modified_mappings = {}
+        self.modified_comments = {}
+        self.modified_modifiers = {}
+        self.modified_haptic = {}
+        self.modified_combo_haptic = {}
         self.is_modified = False
         self._update_window_title()
 
@@ -344,6 +356,10 @@ class TourBoxConfigWindow(QMainWindow):
         # Clear modifications and switch profile
         self.current_profile = profile
         self.modified_mappings = {}
+        self.modified_comments = {}
+        self.modified_modifiers = {}
+        self.modified_haptic = {}
+        self.modified_combo_haptic = {}
         self.is_modified = False
         self._update_window_title()
 
@@ -402,12 +418,24 @@ class TourBoxConfigWindow(QMainWindow):
                     combo_comment = self.current_profile.modifier_combo_comments.get((mod, ctrl), "")
                     modifier_combos[ctrl] = (action_str, combo_comment)
 
+        # Get haptic setting for rotary controls
+        haptic_strength = None
+        dial_name = ROTARY_TO_DIAL.get(control_name)
+        if dial_name and self.current_profile:
+            # Check modified_haptic first, then profile's dial_settings
+            if dial_name in self.modified_haptic:
+                haptic_strength = self.modified_haptic[dial_name]
+            elif dial_name in self.current_profile.haptic_config.dial_settings:
+                haptic_strength = self.current_profile.haptic_config.dial_settings[dial_name]
+            # Note: haptic_strength=None means "use profile default"
+
         # Load into editor
         self.control_editor.load_control(
             control_name,
             current_action,
             comment=comment,
-            modifier_combos=modifier_combos
+            modifier_combos=modifier_combos,
+            haptic_strength=haptic_strength
         )
 
         # Update status bar
@@ -527,6 +555,45 @@ class TourBoxConfigWindow(QMainWindow):
         else:
             self.statusBar().showMessage(f"Modifier removed: {control_name} (not saved)")
 
+    def _on_haptic_changed(self, dial_name: str, haptic_strength):
+        """Handle haptic setting change from editor
+
+        Args:
+            dial_name: Name of the dial ('knob', 'scroll', or 'dial')
+            haptic_strength: HapticStrength or None (None = use profile default)
+        """
+        logger.info(f"Haptic changed: {dial_name} -> {haptic_strength}")
+
+        # Track the modification
+        self.modified_haptic[dial_name] = haptic_strength
+        self.is_modified = True
+        self._update_window_title()
+
+        # Enable Save button
+        self.save_action.setEnabled(True)
+
+        self.statusBar().showMessage(f"Haptic modified: {dial_name} (not saved)")
+
+    def _on_combo_haptic_changed(self, modifier_name: str, dial_name: str, haptic_strength):
+        """Handle combo haptic setting change from editor
+
+        Args:
+            modifier_name: Name of the modifier button (e.g., 'side')
+            dial_name: Name of the dial ('knob', 'scroll', or 'dial')
+            haptic_strength: HapticStrength or None (None = use profile default)
+        """
+        logger.info(f"Combo haptic changed: {modifier_name}+{dial_name} -> {haptic_strength}")
+
+        # Track the modification
+        self.modified_combo_haptic[(modifier_name, dial_name)] = haptic_strength
+        self.is_modified = True
+        self._update_window_title()
+
+        # Enable Save button
+        self.save_action.setEnabled(True)
+
+        self.statusBar().showMessage(f"Combo haptic modified: {modifier_name}+{dial_name} (not saved)")
+
     def _on_combo_selected(self, combo_control: str):
         """Handle combo selection from Modifier Combinations table
 
@@ -571,8 +638,31 @@ class TourBoxConfigWindow(QMainWindow):
         logger.debug(f"Modified mappings: {self.modified_mappings}")
         logger.debug(f"Modified comments: {self.modified_comments}")
         logger.debug(f"Modified modifiers: {self.modified_modifiers}")
+        logger.debug(f"Modified haptic: {self.modified_haptic}")
+        logger.debug(f"Modified combo haptic: {self.modified_combo_haptic}")
 
         # Apply modifications to the profile object
+        # Apply per-dial haptic settings
+        for dial_name, haptic_strength in self.modified_haptic.items():
+            if haptic_strength is None:
+                # "Use Profile Default" - remove per-dial setting
+                if dial_name in self.current_profile.haptic_config.dial_settings:
+                    del self.current_profile.haptic_config.dial_settings[dial_name]
+            else:
+                # Set per-dial haptic
+                self.current_profile.haptic_config.dial_settings[dial_name] = haptic_strength
+
+        # Apply per-combo haptic settings (modifier + dial combinations)
+        for (modifier_name, dial_name), haptic_strength in self.modified_combo_haptic.items():
+            combo_key = (dial_name, modifier_name)  # HapticConfig uses (dial, modifier)
+            if haptic_strength is None:
+                # "Use Profile Default" - remove per-combo setting
+                if combo_key in self.current_profile.haptic_config.combo_settings:
+                    del self.current_profile.haptic_config.combo_settings[combo_key]
+            else:
+                # Set per-combo haptic
+                self.current_profile.haptic_config.combo_settings[combo_key] = haptic_strength
+
         # Apply comments
         for control_name, comment in self.modified_comments.items():
             if comment:
@@ -700,13 +790,18 @@ class TourBoxConfigWindow(QMainWindow):
             if self.modified_comments:
                 comments_success = save_mapping_comments(self.current_profile)
 
-            success = metadata_success and mappings_success and comments_success and modifiers_success
+            # Save haptic config (always save since it's edited via profile settings)
+            haptic_success = save_haptic_config(self.current_profile)
+
+            success = metadata_success and mappings_success and comments_success and modifiers_success and haptic_success
 
         if success:
             # Clear modified state
             self.modified_mappings = {}
             self.modified_comments = {}
             self.modified_modifiers = {}
+            self.modified_haptic = {}
+            self.modified_combo_haptic = {}
             self.is_modified = False
             self._update_window_title()
 
@@ -1110,7 +1205,10 @@ class TourBoxConfigWindow(QMainWindow):
                     if self.modified_comments:
                         comments_success = save_mapping_comments(self.current_profile)
 
-                    success = metadata_success and modifiers_success and mappings_success and comments_success
+                    # Save haptic config
+                    haptic_success = save_haptic_config(self.current_profile)
+
+                    success = metadata_success and modifiers_success and mappings_success and comments_success and haptic_success
 
                 if not success:
                     reply2 = QMessageBox.critical(
