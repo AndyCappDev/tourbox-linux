@@ -448,8 +448,11 @@ tourboxelite/
 ### Editing Configuration
 
 ```bash
-# Edit config
-nano ~/.config/tourbox/mappings.conf
+# Edit a profile (new format)
+nano ~/.config/tourbox/profiles/default.profile
+
+# Or edit device settings
+nano ~/.config/tourbox/config.conf
 
 # Test changes immediately
 ./venv/bin/python -m tourboxelite -v
@@ -769,7 +772,7 @@ sudo evtest
 # Quick test in Python
 from tourboxelite.config_loader import load_profiles
 
-profiles = load_profiles('~/.config/tourbox/mappings.conf')
+profiles = load_profiles()  # Automatically finds config location
 for p in profiles:
     print(f"Profile: {p.name}")
     print(f"  Mapping: {p.mapping}")
@@ -852,8 +855,11 @@ asyncio.run(test_connection())
 ### Dump Current Config
 
 ```bash
-# See effective configuration
-cat ~/.config/tourbox/mappings.conf
+# See profiles directory
+ls -la ~/.config/tourbox/profiles/
+
+# View a specific profile
+cat ~/.config/tourbox/profiles/default.profile
 
 # Or parse it programmatically
 ./venv/bin/python -c "
@@ -990,7 +996,7 @@ ls -la /usr/local/bin/tourbox-gui
 ```
 
 **GUI shows empty profile list**
-- Check config file exists: `ls ~/.config/tourbox/mappings.conf`
+- Check profiles directory exists: `ls ~/.config/tourbox/profiles/`
 - Check config file permissions: `ls -la ~/.config/tourbox/`
 - Try loading profiles manually:
   ```python
@@ -1002,8 +1008,8 @@ ls -la /usr/local/bin/tourbox-gui
 **Changes not saving in GUI**
 - Check terminal output for save errors
 - Verify config directory is writable: `ls -la ~/.config/tourbox/`
-- Check config backups exist: `ls ~/.config/tourbox/*.bak.*`
-- Look for errors in `~/.config/tourbox/mappings.conf`
+- Check profile backups exist: `ls ~/.config/tourbox/profiles/*.backup.*`
+- Look for errors in profile files in `~/.config/tourbox/profiles/`
 
 ## 📚 Additional Resources
 

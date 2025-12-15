@@ -47,20 +47,44 @@ if [ -f "$SERVICE_FILE" ]; then
     echo -e "${GREEN}✓${NC} Service file removed"
 fi
 
-# Ask about config file
-CONFIG_FILE="$HOME/.config/tourbox/mappings.conf"
-if [ -f "$CONFIG_FILE" ]; then
+# Ask about config files
+CONFIG_DIR="$HOME/.config/tourbox"
+PROFILES_DIR="$CONFIG_DIR/profiles"
+CONFIG_FILE="$CONFIG_DIR/config.conf"
+LEGACY_CONFIG_FILE="$CONFIG_DIR/mappings.conf"
+
+if [ -d "$CONFIG_DIR" ]; then
     echo ""
-    read -p "Remove config file ($CONFIG_FILE)? (y/N): " -n 1 -r
+    echo "Configuration directory found: $CONFIG_DIR"
+
+    # Show what exists
+    if [ -d "$PROFILES_DIR" ]; then
+        PROFILE_COUNT=$(ls -1 "$PROFILES_DIR"/*.profile 2>/dev/null | wc -l)
+        echo "  - $PROFILE_COUNT profile(s) in profiles/"
+    fi
+    [ -f "$CONFIG_FILE" ] && echo "  - config.conf (device settings)"
+    [ -f "$LEGACY_CONFIG_FILE" ] && echo "  - mappings.conf (legacy config)"
+
+    read -p "Remove all configuration files? (y/N): " -n 1 -r
     echo ""
 
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm "$CONFIG_FILE"
+        # Remove profiles directory
+        if [ -d "$PROFILES_DIR" ]; then
+            rm -rf "$PROFILES_DIR"
+            echo -e "${GREEN}✓${NC} Profiles directory removed"
+        fi
+        # Remove config files
+        [ -f "$CONFIG_FILE" ] && rm "$CONFIG_FILE"
+        [ -f "$LEGACY_CONFIG_FILE" ] && rm "$LEGACY_CONFIG_FILE"
+        # Remove any backup files
+        rm -f "$CONFIG_DIR"/*.backup.* 2>/dev/null
+        rm -f "$CONFIG_DIR"/*.legacy 2>/dev/null
         # Remove directory if empty
-        rmdir "$HOME/.config/tourbox" 2>/dev/null || true
-        echo -e "${GREEN}✓${NC} Config file removed"
+        rmdir "$CONFIG_DIR" 2>/dev/null || true
+        echo -e "${GREEN}✓${NC} Configuration removed"
     else
-        echo -e "${YELLOW}!${NC} Config file kept"
+        echo -e "${YELLOW}!${NC} Configuration kept"
     fi
 fi
 

@@ -317,36 +317,43 @@ echo "=========================================="
 echo ""
 
 CONFIG_DIR="$HOME/.config/tourbox"
-CONFIG_FILE="$CONFIG_DIR/mappings.conf"
+PROFILES_DIR="$CONFIG_DIR/profiles"
+CONFIG_FILE="$CONFIG_DIR/config.conf"
+LEGACY_CONFIG_FILE="$CONFIG_DIR/mappings.conf"
 DEFAULT_CONFIG="tourboxelite/default_mappings.conf"
 
 # Create config directory
 mkdir -p "$CONFIG_DIR"
 
-# Check if config exists
-if [ -f "$CONFIG_FILE" ]; then
-    echo -e "${YELLOW}!${NC} Config file already exists: $CONFIG_FILE"
-    echo ""
-    read -p "Do you want to keep your existing config? (Y/n): " -n 1 -r
-    echo ""
+# Check which config format exists
+if [ -d "$PROFILES_DIR" ] && [ "$(ls -A "$PROFILES_DIR"/*.profile 2>/dev/null)" ]; then
+    # New format: profiles directory exists with .profile files
+    echo -e "${GREEN}✓${NC} Found existing profiles in: $PROFILES_DIR"
+    echo -e "${GREEN}✓${NC} Keeping existing configuration"
 
-    if [[ $REPLY =~ ^[Nn]$ ]]; then
-        # Backup and replace
-        BACKUP="$CONFIG_FILE.backup.$(date +%Y%m%d_%H%M%S)"
-        echo "Backing up to: $BACKUP"
-        cp "$CONFIG_FILE" "$BACKUP"
-        cp "$DEFAULT_CONFIG" "$CONFIG_FILE"
-        echo -e "${GREEN}✓${NC} Installed new config (backup saved)"
-    else
-        echo -e "${GREEN}✓${NC} Keeping existing config"
+    # Check if we need to prompt for MAC address (if config.conf doesn't have one)
+    if [ -f "$CONFIG_FILE" ]; then
+        EXISTING_MAC=$(grep -E "^mac_address\s*=" "$CONFIG_FILE" 2>/dev/null | sed 's/.*=\s*//' | tr -d ' ')
+        if [ -z "$EXISTING_MAC" ] || [ "$EXISTING_MAC" = "XX:XX:XX:XX:XX:XX" ]; then
+            echo ""
+            echo "No MAC address configured for Bluetooth."
+            read -p "Enter MAC address for Bluetooth (or press Enter to skip): " MAC_ADDRESS
+            if [ -n "$MAC_ADDRESS" ]; then
+                if [[ $MAC_ADDRESS =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
+                    sed -i "s/mac_address = .*/mac_address = $MAC_ADDRESS/" "$CONFIG_FILE"
+                    echo -e "${GREEN}✓${NC} MAC address configured"
+                else
+                    echo -e "${YELLOW}!${NC} Invalid MAC format - please edit config manually"
+                fi
+            fi
+        fi
     fi
+elif [ -f "$LEGACY_CONFIG_FILE" ]; then
+    # Legacy format: mappings.conf exists (will be migrated by GUI)
+    echo -e "${YELLOW}!${NC} Legacy config file found: $LEGACY_CONFIG_FILE"
+    echo -e "${GREEN}✓${NC} Keeping existing config (will be migrated when you run the GUI)"
 else
-    # Fresh install
-    cp "$DEFAULT_CONFIG" "$CONFIG_FILE"
-    echo -e "${GREEN}✓${NC} Installed default config to: $CONFIG_FILE"
-
-    # Prompt for MAC address
-    echo ""
+    # Fresh install: create new format directly
     echo "The driver supports both USB and Bluetooth connections."
     echo ""
     echo "  USB:       Just plug in the cable - no configuration needed"
@@ -359,12 +366,25 @@ else
     echo ""
     read -p "Enter MAC address for Bluetooth (or press Enter to skip for USB-only): " MAC_ADDRESS
 
+    # Create initial configuration using Python
     if [ -n "$MAC_ADDRESS" ]; then
         if [[ $MAC_ADDRESS =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
-            sed -i "s/mac_address = .*/mac_address = $MAC_ADDRESS/" "$CONFIG_FILE"
-            echo -e "${GREEN}✓${NC} MAC address configured"
+            ./venv/bin/python -c "from tourboxelite.profile_io import create_initial_config; success, msg = create_initial_config('$MAC_ADDRESS'); print(msg); exit(0 if success else 1)"
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}✓${NC} Configuration created with MAC address"
+            else
+                echo -e "${RED}✗${NC} Failed to create configuration"
+            fi
         else
-            echo -e "${YELLOW}!${NC} Invalid MAC format - please edit config manually"
+            echo -e "${YELLOW}!${NC} Invalid MAC format - creating config without MAC address"
+            ./venv/bin/python -c "from tourboxelite.profile_io import create_initial_config; success, msg = create_initial_config(); print(msg); exit(0 if success else 1)"
+        fi
+    else
+        ./venv/bin/python -c "from tourboxelite.profile_io import create_initial_config; success, msg = create_initial_config(); print(msg); exit(0 if success else 1)"
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✓${NC} Configuration created"
+        else
+            echo -e "${RED}✗${NC} Failed to create configuration"
         fi
     fi
 fi

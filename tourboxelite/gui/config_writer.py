@@ -14,8 +14,17 @@ from evdev import ecodes as e
 
 from tourboxelite.config_loader import get_config_path, BUTTON_CODES, Profile
 from tourboxelite.haptic import HapticStrength, HapticSpeed
+from tourboxelite.profile_io import (
+    has_profiles_dir, save_profile_to_file, get_profile_filepath,
+    delete_profile_file, rename_profile_file, profile_exists
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _using_new_format() -> bool:
+    """Check if we're using the new multi-file profile format"""
+    return has_profiles_dir()
 
 # All control names that should be in a profile
 ALL_CONTROLS = [
@@ -109,6 +118,15 @@ def save_profile(profile: Profile, modifications: Dict[str, str]) -> bool:
     Returns:
         True if save succeeded, False otherwise
     """
+    # Use new format if profiles directory exists
+    if _using_new_format():
+        # Apply modifications to profile mapping
+        # Note: The new format save writes the entire profile, so modifications
+        # should already be applied to the profile object by the caller
+        filepath = get_profile_filepath(profile.name)
+        return save_profile_to_file(profile, filepath)
+
+    # Legacy format handling
     config_path = get_config_path()
 
     if not config_path:
@@ -248,6 +266,12 @@ def save_modifier_config(profile: Profile) -> bool:
     Returns:
         True if save succeeded, False otherwise
     """
+    # Use new format if profiles directory exists
+    if _using_new_format():
+        filepath = get_profile_filepath(profile.name)
+        return save_profile_to_file(profile, filepath)
+
+    # Legacy format handling
     config_path = get_config_path()
 
     if not config_path:
@@ -403,6 +427,12 @@ def save_mapping_comments(profile: Profile) -> bool:
     Returns:
         True if save succeeded, False otherwise
     """
+    # Use new format if profiles directory exists
+    if _using_new_format():
+        filepath = get_profile_filepath(profile.name)
+        return save_profile_to_file(profile, filepath)
+
+    # Legacy format handling
     config_path = get_config_path()
 
     if not config_path:
@@ -501,8 +531,7 @@ def save_mapping_comments(profile: Profile) -> bool:
 def save_haptic_config(profile: Profile) -> bool:
     """Save haptic configuration to config file
 
-    Handles the global haptic setting (Phase 1). For Phase 2, this will be
-    extended to handle per-dial and per-combo settings.
+    Handles global, per-dial, and per-combo haptic settings.
 
     Args:
         profile: Profile object with haptic configuration
@@ -510,6 +539,12 @@ def save_haptic_config(profile: Profile) -> bool:
     Returns:
         True if save succeeded, False otherwise
     """
+    # Use new format if profiles directory exists
+    if _using_new_format():
+        filepath = get_profile_filepath(profile.name)
+        return save_profile_to_file(profile, filepath)
+
+    # Legacy format handling
     config_path = get_config_path()
 
     if not config_path:
@@ -649,6 +684,19 @@ def save_profile_metadata(profile: Profile, old_name: Optional[str] = None) -> b
     Returns:
         True if save succeeded, False otherwise
     """
+    # Use new format if profiles directory exists
+    if _using_new_format():
+        # If renaming, we need to rename the file first
+        if old_name and old_name != profile.name:
+            if not rename_profile_file(old_name, profile.name):
+                logger.error(f"Failed to rename profile file from {old_name} to {profile.name}")
+                return False
+
+        # Save the profile with updated metadata
+        filepath = get_profile_filepath(profile.name)
+        return save_profile_to_file(profile, filepath)
+
+    # Legacy format handling
     config_path = get_config_path()
 
     if not config_path:
@@ -785,7 +833,7 @@ def save_profile_metadata(profile: Profile, old_name: Optional[str] = None) -> b
 
 
 def profile_exists_in_config(profile_name: str) -> bool:
-    """Check if a profile exists in the config file
+    """Check if a profile exists in the config file or profiles directory
 
     Args:
         profile_name: Name of the profile to check
@@ -793,6 +841,11 @@ def profile_exists_in_config(profile_name: str) -> bool:
     Returns:
         True if profile exists, False otherwise
     """
+    # Use new format if profiles directory exists
+    if _using_new_format():
+        return profile_exists(profile_name)
+
+    # Legacy format handling
     config_path = get_config_path()
 
     if not config_path:
@@ -811,14 +864,20 @@ def profile_exists_in_config(profile_name: str) -> bool:
 
 
 def create_new_profile(profile: Profile) -> bool:
-    """Create a new profile section in the config file
+    """Create a new profile in the config file or profiles directory
 
     Args:
-        profile: Profile object to add to config
+        profile: Profile object to add
 
     Returns:
         True if creation succeeded, False otherwise
     """
+    # Use new format if profiles directory exists
+    if _using_new_format():
+        filepath = get_profile_filepath(profile.name)
+        return save_profile_to_file(profile, filepath)
+
+    # Legacy format handling
     config_path = get_config_path()
 
     if not config_path:
@@ -875,7 +934,7 @@ def create_new_profile(profile: Profile) -> bool:
 
 
 def delete_profile(profile_name: str) -> bool:
-    """Delete a profile from the config file
+    """Delete a profile from the config file or profiles directory
 
     Args:
         profile_name: Name of the profile to delete
@@ -883,15 +942,20 @@ def delete_profile(profile_name: str) -> bool:
     Returns:
         True if deletion succeeded, False otherwise
     """
+    # Don't allow deleting default profile
+    if profile_name == 'default':
+        logger.error("Cannot delete default profile")
+        return False
+
+    # Use new format if profiles directory exists
+    if _using_new_format():
+        return delete_profile_file(profile_name)
+
+    # Legacy format handling
     config_path = get_config_path()
 
     if not config_path:
         logger.error("No config file found")
-        return False
-
-    # Don't allow deleting default profile
-    if profile_name == 'default':
-        logger.error("Cannot delete default profile")
         return False
 
     try:
@@ -1064,3 +1128,44 @@ def cleanup_old_backups(config_path: Optional[str] = None, keep_count: int = 5):
 
     except Exception as e:
         logger.warning(f"Error cleaning up backups: {e}")
+
+
+def export_profile(profile: Profile, destination_path: str) -> bool:
+    """Export a profile to a file
+
+    Args:
+        profile: Profile object to export
+        destination_path: Path to save the profile to
+
+    Returns:
+        True if export succeeded, False otherwise
+    """
+    from pathlib import Path
+    return save_profile_to_file(profile, Path(destination_path))
+
+
+def import_profile(source_path: str) -> tuple:
+    """Import a profile from a file
+
+    Args:
+        source_path: Path to the profile file to import
+
+    Returns:
+        Tuple of (Profile or None, error_message)
+    """
+    from pathlib import Path
+    from tourboxelite.profile_io import import_profile_from_file
+    return import_profile_from_file(Path(source_path))
+
+
+def install_imported_profile(profile: Profile) -> bool:
+    """Install an imported profile to the profiles directory
+
+    Args:
+        profile: Profile object to install
+
+    Returns:
+        True if installation succeeded, False otherwise
+    """
+    filepath = get_profile_filepath(profile.name)
+    return save_profile_to_file(profile, filepath)

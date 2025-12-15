@@ -18,26 +18,30 @@ def get_mac_address():
     if 'TOURBOX_MAC' in os.environ:
         return os.environ['TOURBOX_MAC']
 
-    # 3. Try to read from config file
-    config_path = Path.home() / '.config' / 'tourbox' / 'mappings.conf'
-    if config_path.exists():
-        try:
-            with open(config_path, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith('mac_address'):
-                        mac = line.split('=')[1].strip()
-                        if mac != 'XX:XX:XX:XX:XX:XX':  # Skip placeholder
-                            return mac
-        except Exception:
-            pass
+    # 3. Try to read from config files (new format first, then legacy)
+    config_paths = [
+        Path.home() / '.config' / 'tourbox' / 'config.conf',      # New format
+        Path.home() / '.config' / 'tourbox' / 'mappings.conf',    # Legacy format
+    ]
+    for config_path in config_paths:
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith('mac_address'):
+                            mac = line.split('=')[1].strip()
+                            if mac != 'XX:XX:XX:XX:XX:XX':  # Skip placeholder
+                                return mac
+            except Exception:
+                pass
 
     # 4. No MAC address found
     print("Error: No TourBox MAC address provided!")
     print("\nProvide MAC address using one of these methods:")
     print("  1. Command line:   ./ble_test_tourbox.py XX:XX:XX:XX:XX:XX")
     print("  2. Environment:    TOURBOX_MAC=XX:XX:XX:XX:XX:XX ./ble_test_tourbox.py")
-    print("  3. Config file:    Set mac_address in ~/.config/tourbox/mappings.conf")
+    print("  3. Config file:    Set mac_address in ~/.config/tourbox/config.conf")
     print("\nFind your MAC address with: bluetoothctl devices")
     sys.exit(1)
 

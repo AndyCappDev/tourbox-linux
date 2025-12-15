@@ -358,7 +358,7 @@ def main():
             print("")
             print("To set up config file:")
             print("  ./install_config.sh")
-            print("  nano ~/.config/tourbox/mappings.conf")
+            print("  nano ~/.config/tourbox/config.conf")
             print("")
             print("Options:")
             print("  -c, --config PATH    Use custom config file")

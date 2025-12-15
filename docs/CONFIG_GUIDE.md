@@ -2,6 +2,50 @@
 
 This guide explains how to configure your TourBox Elite device and customize button mappings.
 
+## Configuration File Structure
+
+TourBox Elite supports two configuration formats:
+
+### New Format (v2.3.0+) - Individual Profile Files
+
+Profiles are stored as individual `.profile` files in `~/.config/tourbox/profiles/`:
+
+```
+~/.config/tourbox/
+├── config.conf              # Device settings only
+└── profiles/
+    ├── default.profile      # Default profile (required)
+    ├── davinci_resolve.profile
+    ├── blender.profile
+    └── ...
+```
+
+**Benefits:**
+- Easy to share profiles with other users
+- Import/export profiles via the GUI
+- Better organization for many profiles
+
+### Legacy Format - Single Config File
+
+All profiles in one file at `~/.config/tourbox/mappings.conf`:
+
+```ini
+[device]
+mac_address = XX:XX:XX:XX:XX:XX
+
+[profile:default]
+side = KEY_A
+...
+
+[profile:VSCode]
+app_id = Code
+...
+```
+
+**Note:** The GUI will offer to migrate your configuration to the new format on first launch. Your original config is backed up before migration.
+
+---
+
 ## Quick Start
 
 > **Note:** If you used `install.sh` from the README, you already have a config file set up with your MAC address. You can skip to step 2 below to edit your configuration.

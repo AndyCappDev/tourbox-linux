@@ -1,6 +1,6 @@
 # TourBox Elite / Elite Plus Linux Driver
 
-**Version 2.2.1**
+**Version 2.3.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Linux](https://img.shields.io/badge/platform-linux-lightgrey.svg)](https://www.linux.org/)
@@ -9,20 +9,18 @@
 **Author:** Scott Bowman ([AndyCappDev](https://github.com/AndyCappDev))
 **Original Repository:** [github.com/AndyCappDev/tourboxelite](https://github.com/AndyCappDev/tourboxelite)
 
-Linux driver for the TourBox Elite and Elite Plus by TourBox Tech Inc. This driver translates input events to Linux input events via evdev/uinput, supporting both **USB** and **Bluetooth LE** connections.
+Linux driver for the TourBox Elite and Elite Plus by TourBox Tech Inc. Supports both **USB** and **Bluetooth LE** connections.
 
 ## Features
 
 - ✅ **Graphical Configuration** - Full-featured GUI for visual configuration with live preview
 - ✅ **USB and Bluetooth LE** - Connect via USB cable or wirelessly via Bluetooth
-- ✅ **Auto-Detection** - Automatically uses USB if connected, falls back to Bluetooth
+- ✅ **Haptic Feedback** - Configurable vibration feedback for rotary controls (knob, scroll, dial)
 - ✅ **Application Profiles** - Different button mappings per application (Wayland only)
 - ✅ **Window Detection** - Automatic profile switching based on focused window
 - ✅ **Full Button Mapping** - All 20 controls configurable (buttons, knobs, scroll wheel, dial)
 - ✅ **Modifier Keys** - Create over 250 unique key combinations per profile using physical buttons as modifiers
-- ✅ **Haptic Feedback** - Configurable vibration feedback for rotary controls (knob, scroll, dial)
 - ✅ **Systemd Integration** - Runs as a user service, starts on login
-- ✅ **Update Checker** - Check for new versions from within the GUI
 
 ## Requirements
 
@@ -74,7 +72,7 @@ The driver **auto-detects** the connection type:
 
 ### Step 1: Find Your TourBox MAC Address (Bluetooth only)
 
-**Skip this step if you only plan to use USB.**
+**Skip this step if you only plan to use USB.**  Though we recommend setting it up for Bluetooth on the Elite or Elite Plus in case you want to use Bluetooth later.
 
 Make sure your TourBox Elite is powered on and NOT connected via USB.
 
@@ -100,7 +98,7 @@ cd tourboxelite
 The installer will:
 1. Create a Python virtual environment
 2. Install the driver and dependencies
-3. Set up your configuration file
+3. Set up your configuration file - It will ask for the Bluetooth MAC address from setp 1.
 4. Install and enable the systemd service
 
 Log off and log back on again or reboot
@@ -112,7 +110,7 @@ Log off and log back on again or reboot
 If you did not provide the MAC address during installation, edit the configuration file:
 
 ```bash
-nano ~/.config/tourbox/mappings.conf
+nano ~/.config/tourbox/config.conf
 ```
 
 Find the `[device]` section and set your MAC address:
@@ -124,6 +122,8 @@ mac_address = 12:34:56:78:9A:BC  # Replace with your actual MAC address
 ```
 
 Save the file (Ctrl+O, Enter, Ctrl+X in nano).
+
+> **Note:** If you haven't run the GUI yet and you are upgrading, your config may still be in the legacy format at `~/.config/tourbox/mappings.conf`. The GUI will automatically migrate it to the new format on first launch.
 
 Log out and log back in or reboot to activate the driver.
 
@@ -239,7 +239,7 @@ bluetoothctl devices
 # NOTE: Do NOT pair the device - pairing is not required and won't work.
 #       The driver connects directly using the MAC address via BLE.
 
-# 4. Copy and edit config
+# 4. Copy and edit config (legacy format - GUI will migrate on first launch)
 mkdir -p ~/.config/tourbox
 cp tourboxelite/default_mappings.conf ~/.config/tourbox/mappings.conf
 nano ~/.config/tourbox/mappings.conf
@@ -284,9 +284,13 @@ systemctl --user start tourbox
 
 ## Configuration
 
-Edit `~/.config/tourbox/mappings.conf` to customize button mappings.
+The easiest way to configure button mappings is with the **graphical configuration tool** (see below). For manual editing, profiles are stored in `~/.config/tourbox/profiles/` as individual `.profile` files.
 
-The config uses **profiles** - the `[profile:default]` section is required and contains your main button mappings:
+> **Note:** Legacy configs at `~/.config/tourbox/mappings.conf` are automatically migrated when you first run the GUI.
+
+### Legacy Format (Single File)
+
+If editing manually before running the GUI, the config uses **profiles** - the `[profile:default]` section is required and contains your main button mappings:
 
 ```ini
 [device]
@@ -458,7 +462,7 @@ ls -la /dev/ttyACM*
 # Run with a specific port
 ./venv/bin/python -m tourboxelite --usb --port /dev/ttyACM1
 
-# Or set it in your config file (~/.config/tourbox/mappings.conf):
+# Or set it in your config file (~/.config/tourbox/config.conf):
 # [device]
 # usb_port = /dev/ttyACM1
 ```

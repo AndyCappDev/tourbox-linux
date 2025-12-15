@@ -7,7 +7,14 @@
 #       - You want to reset to defaults (WARNING: loses customizations!)
 #       - You want to get updated example profiles
 
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
 CONFIG_DIR="$HOME/.config/tourbox"
+PROFILES_DIR="$CONFIG_DIR/profiles"
 CONFIG_FILE="$CONFIG_DIR/mappings.conf"
 DEFAULT_CONFIG="tourboxelite/default_mappings.conf"
 
@@ -15,13 +22,29 @@ echo "TourBox Elite Configuration Installer"
 echo "======================================"
 echo ""
 
+# Check if using new format (profiles directory)
+if [ -d "$PROFILES_DIR" ] && [ "$(ls -A "$PROFILES_DIR"/*.profile 2>/dev/null)" ]; then
+    echo -e "${YELLOW}!${NC} You are using the new profile format."
+    echo ""
+    echo "Your profiles are stored in: $PROFILES_DIR"
+    echo ""
+    echo "To manage profiles, use the GUI:"
+    echo "  tourbox-gui"
+    echo ""
+    echo "To reset to defaults, first remove the profiles directory:"
+    echo "  rm -rf $PROFILES_DIR $CONFIG_DIR/config.conf"
+    echo "  ./install_config.sh"
+    echo ""
+    exit 0
+fi
+
 # Create config directory if it doesn't exist
 if [ ! -d "$CONFIG_DIR" ]; then
     echo "Creating config directory: $CONFIG_DIR"
     mkdir -p "$CONFIG_DIR"
 fi
 
-# Check if config already exists
+# Check if legacy config already exists
 SKIP_MAC_PROMPT=0
 if [ -f "$CONFIG_FILE" ]; then
     echo "Config file already exists: $CONFIG_FILE"

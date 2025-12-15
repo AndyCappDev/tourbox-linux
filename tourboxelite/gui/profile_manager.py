@@ -8,7 +8,8 @@ import logging
 from typing import List, Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QLabel, QMessageBox, QInputDialog, QDialog, QHeaderView
+    QPushButton, QLabel, QMessageBox, QInputDialog, QDialog, QHeaderView,
+    QFileDialog
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QFont
@@ -20,8 +21,14 @@ from tourboxelite.haptic import HapticConfig
 # Import GUI dialog
 from .profile_settings_dialog import ProfileSettingsDialog
 
-# Import config writer for deletion
-from .config_writer import delete_profile
+# Import config writer for deletion and import/export
+from .config_writer import (
+    delete_profile, export_profile, import_profile, install_imported_profile,
+    profile_exists_in_config
+)
+
+# Import conflict dialog
+from .import_conflict_dialog import ImportConflictDialog
 
 # Import UI constants
 from tourboxelite.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER
@@ -85,6 +92,20 @@ class ProfileManager(QWidget):
         self.delete_button.setToolTip("Delete selected profile")
         self.delete_button.clicked.connect(self._on_delete_profile)
         button_layout.addWidget(self.delete_button)
+
+        # Spacer
+        button_layout.addStretch()
+
+        # Import/Export buttons
+        self.import_button = QPushButton("Import")
+        self.import_button.setToolTip("Import a profile from file")
+        self.import_button.clicked.connect(self._on_import_profile)
+        button_layout.addWidget(self.import_button)
+
+        self.export_button = QPushButton("Export")
+        self.export_button.setToolTip("Export selected profile to file")
+        self.export_button.clicked.connect(self._on_export_profile)
+        button_layout.addWidget(self.export_button)
 
         layout.addLayout(button_layout)
 
@@ -467,3 +488,132 @@ class ProfileManager(QWidget):
 
         # Can't delete if nothing selected or if default profile
         self.delete_button.setEnabled(has_selection and not is_default)
+
+        # Export requires a selection
+        self.export_button.setEnabled(has_selection)
+
+    def _on_import_profile(self):
+        """Handle Import button click"""
+        # Open file dialog
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Profile",
+            "",
+            "Profile Files (*.profile);;All Files (*)"
+        )
+
+        if not file_path:
+            return  # User cancelled
+
+        # Import the profile
+        profile, error = import_profile(file_path)
+
+        if profile is None:
+            QMessageBox.critical(
+                self,
+                "Import Failed",
+                f"Failed to import profile:\n\n{error}"
+            )
+            return
+
+        # Check for name conflict
+        if profile_exists_in_config(profile.name):
+            # Show conflict dialog
+            dialog = ImportConflictDialog(profile.name, self)
+            if dialog.exec() != QDialog.Accepted:
+                return  # User cancelled
+
+            action, new_name = dialog.get_result()
+
+            if action == ImportConflictDialog.CANCEL:
+                return
+
+            if action == ImportConflictDialog.RENAME:
+                # Check new name doesn't also conflict
+                if profile_exists_in_config(new_name):
+                    QMessageBox.critical(
+                        self,
+                        "Import Failed",
+                        f"A profile named '{new_name}' also already exists."
+                    )
+                    return
+
+                # Update profile name
+                profile.name = new_name
+
+            elif action == ImportConflictDialog.REPLACE:
+                # Delete existing profile first
+                if not delete_profile(profile.name):
+                    QMessageBox.critical(
+                        self,
+                        "Import Failed",
+                        f"Failed to replace existing profile '{profile.name}'."
+                    )
+                    return
+
+        # Install the profile
+        if install_imported_profile(profile):
+            # Reload profiles
+            from tourboxelite.config_loader import load_profiles
+            self.profiles = load_profiles()
+            self._reload_profile_list()
+
+            # Select the imported profile
+            for row in range(self.profile_table.rowCount()):
+                name_item = self.profile_table.item(row, 0)
+                if name_item and name_item.text() == profile.name:
+                    self.profile_table.selectRow(row)
+                    break
+
+            QMessageBox.information(
+                self,
+                "Import Successful",
+                f"Profile '{profile.name}' has been imported successfully."
+            )
+
+            # Emit signal to notify of changes
+            self.profiles_changed.emit()
+        else:
+            QMessageBox.critical(
+                self,
+                "Import Failed",
+                "Failed to save imported profile."
+            )
+
+    def _on_export_profile(self):
+        """Handle Export button click"""
+        if not self.current_profile:
+            return
+
+        # Suggest a filename based on profile name
+        from tourboxelite.profile_io import sanitize_profile_filename
+        suggested_name = f"{sanitize_profile_filename(self.current_profile.name)}.profile"
+
+        # Open file dialog
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Profile",
+            suggested_name,
+            "Profile Files (*.profile);;All Files (*)"
+        )
+
+        if not file_path:
+            return  # User cancelled
+
+        # Ensure .profile extension
+        if not file_path.endswith('.profile'):
+            file_path += '.profile'
+
+        # Export the profile
+        if export_profile(self.current_profile, file_path):
+            QMessageBox.information(
+                self,
+                "Export Successful",
+                f"Profile '{self.current_profile.name}' has been exported to:\n\n{file_path}"
+            )
+        else:
+            QMessageBox.critical(
+                self,
+                "Export Failed",
+                f"Failed to export profile '{self.current_profile.name}'."
+            )

@@ -133,6 +133,20 @@ class TourBoxConfigWindow(QMainWindow):
 
         file_menu.addSeparator()
 
+        # Import Profile action
+        import_action = QAction("&Import Profile...", self)
+        import_action.setStatusTip("Import a profile from file")
+        import_action.triggered.connect(self._on_menu_import_profile)
+        file_menu.addAction(import_action)
+
+        # Export Profile action
+        export_action = QAction("&Export Profile...", self)
+        export_action.setStatusTip("Export current profile to file")
+        export_action.triggered.connect(self._on_menu_export_profile)
+        file_menu.addAction(export_action)
+
+        file_menu.addSeparator()
+
         # Quit action
         quit_action = QAction("&Quit", self)
         quit_action.setShortcut(QKeySequence.Quit)
@@ -189,6 +203,9 @@ class TourBoxConfigWindow(QMainWindow):
             return
         self._initialized = True
 
+        # Check for migration before loading profiles
+        self._check_migration()
+
         # Load profiles directly
         self._load_profiles()
 
@@ -205,8 +222,8 @@ class TourBoxConfigWindow(QMainWindow):
                 QMessageBox.warning(
                     self,
                     "No Profiles Found",
-                    "No profiles found in configuration file.\n"
-                    "Please check your configuration at ~/.config/tourbox/mappings.conf"
+                    "No profiles found in configuration.\n"
+                    "Please check your configuration at ~/.config/tourbox/"
                 )
                 self.statusBar().showMessage("No profiles found")
                 return
@@ -961,6 +978,51 @@ class TourBoxConfigWindow(QMainWindow):
                 readable_parts.append(part)
 
         return "+".join(readable_parts)
+
+    def _check_migration(self):
+        """Check if config migration is needed and perform it automatically"""
+        from tourboxelite.profile_io import needs_migration, migrate_legacy_config
+
+        if not needs_migration():
+            return
+
+        # Inform user that migration will happen
+        QMessageBox.information(
+            self,
+            "Configuration Migration",
+            "TourBox Elite now stores profiles in individual files for easier sharing.\n\n"
+            "All your existing profiles and settings will be preserved.\n"
+            "A backup of your current configuration will also be created."
+        )
+
+        # Perform migration
+        success, message = migrate_legacy_config()
+
+        if success:
+            QMessageBox.information(
+                self,
+                "Migration Complete",
+                f"Your profiles have been migrated successfully.\n\n{message}"
+            )
+            logger.info(f"Migration completed: {message}")
+        else:
+            QMessageBox.warning(
+                self,
+                "Migration Failed",
+                f"Failed to migrate profiles:\n\n{message}\n\n"
+                "Your existing configuration has not been modified."
+            )
+            logger.error(f"Migration failed: {message}")
+
+    def _on_menu_import_profile(self):
+        """Handle Import Profile menu action"""
+        # Delegate to profile manager
+        self.profile_manager._on_import_profile()
+
+    def _on_menu_export_profile(self):
+        """Handle Export Profile menu action"""
+        # Delegate to profile manager
+        self.profile_manager._on_export_profile()
 
     def _open_user_guide(self):
         """Open the GUI User Guide documentation on GitHub"""

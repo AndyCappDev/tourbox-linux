@@ -230,6 +230,8 @@ def create_button_mapping(press_action: str, release_action: str = None) -> Tupl
 def get_config_path(config_path: str = None) -> str:
     """Find config file path
 
+    Checks for both new format (config.conf) and legacy format (mappings.conf).
+
     Args:
         config_path: Path to config file. If None, searches default locations.
 
@@ -243,16 +245,21 @@ def get_config_path(config_path: str = None) -> str:
     default_paths = []
 
     # If running under sudo, check the real user's config first
-    # This allows: sudo ./driver -> uses /home/username/.config/tourbox/mappings.conf
+    # This allows: sudo ./driver -> uses /home/username/.config/tourbox/...
     sudo_user = os.environ.get('SUDO_USER')
     if sudo_user:
         sudo_home = os.path.expanduser(f'~{sudo_user}')
-        sudo_config = os.path.join(sudo_home, '.config/tourbox/mappings.conf')
-        default_paths.append(sudo_config)
+        # Check new format first
+        sudo_config_new = os.path.join(sudo_home, '.config/tourbox/config.conf')
+        default_paths.append(sudo_config_new)
+        # Then legacy format
+        sudo_config_legacy = os.path.join(sudo_home, '.config/tourbox/mappings.conf')
+        default_paths.append(sudo_config_legacy)
 
     # Then check current user's home (for non-sudo usage)
     default_paths.extend([
-        os.path.expanduser('~/.config/tourbox/mappings.conf'),
+        os.path.expanduser('~/.config/tourbox/config.conf'),  # New format
+        os.path.expanduser('~/.config/tourbox/mappings.conf'),  # Legacy format
         '/etc/tourbox/mappings.conf',  # System-wide config
         os.path.join(os.path.dirname(__file__), 'default_mappings.conf'),  # Built-in fallback
     ])
@@ -353,7 +360,10 @@ def parse_profile_mappings(config: configparser.ConfigParser, section_name: str)
 
 
 def load_profiles(config_path: str = None) -> List[Profile]:
-    """Load application-specific profiles from config file
+    """Load application-specific profiles from config file or profiles directory
+
+    This function supports both the new multi-file format (profiles/*.profile)
+    and the legacy single-file format (mappings.conf with [profile:*] sections).
 
     Args:
         config_path: Path to config file. If None, searches default locations.
@@ -361,13 +371,36 @@ def load_profiles(config_path: str = None) -> List[Profile]:
     Returns:
         List of Profile objects (includes default profile if present)
     """
+    from .profile_io import has_profiles_dir, load_profiles_from_directory
+
+    # Check if new format exists (profiles directory with .profile files)
+    if has_profiles_dir():
+        logger.info("Loading profiles from profiles directory (new format)")
+        return load_profiles_from_directory()
+
+    # Fall back to legacy format
     config_path = get_config_path(config_path)
 
     if not config_path:
         logger.warning("No config file found for profiles")
         return []
 
-    logger.info(f"Loading profiles from {config_path}")
+    return load_profiles_from_legacy_file(config_path)
+
+
+def load_profiles_from_legacy_file(config_path: str) -> List[Profile]:
+    """Load profiles from a legacy format config file
+
+    This loads profiles from a single config file with [profile:*] sections.
+    Used for migration and initial config creation.
+
+    Args:
+        config_path: Path to the legacy config file
+
+    Returns:
+        List of Profile objects
+    """
+    logger.info(f"Loading profiles from {config_path} (legacy format)")
 
     config = configparser.ConfigParser(inline_comment_prefixes=('#',), interpolation=None)
     config.read(config_path)

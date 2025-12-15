@@ -1,6 +1,6 @@
 # TourBox Elite Configuration GUI - User Guide
 
-**Version:** 1.3
+**Version:** 1.4
 **Last Updated:** 2025-12-15
 
 ## Table of Contents
@@ -10,12 +10,13 @@
 3. [Understanding the Interface](#understanding-the-interface)
 4. [Basic Tasks](#basic-tasks)
 5. [Working with Profiles](#working-with-profiles)
-6. [Configuring Button Mappings](#configuring-button-mappings)
-7. [Using Modifier Buttons](#using-modifier-buttons)
-8. [Configuring Haptic Feedback](#configuring-haptic-feedback)
-9. [Tips & Tricks](#tips--tricks)
-10. [Checking for Updates](#checking-for-updates)
-11. [Troubleshooting](#troubleshooting)
+6. [Importing and Exporting Profiles](#importing-and-exporting-profiles)
+7. [Configuring Button Mappings](#configuring-button-mappings)
+8. [Using Modifier Buttons](#using-modifier-buttons)
+9. [Configuring Haptic Feedback](#configuring-haptic-feedback)
+10. [Tips & Tricks](#tips--tricks)
+11. [Checking for Updates](#checking-for-updates)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -26,6 +27,7 @@ The TourBox Elite Configuration GUI is a graphical application that lets you con
 - **Visually configure** all 20 controls (buttons, dials, scroll wheel, knob)
 - **Create over 250 unique key combinations per profile** using modifier buttons
 - **Create application-specific profiles** that automatically switch based on the active window
+- **Import and export profiles** to share with other users
 - **Configure haptic feedback** for rotary controls (knob, scroll wheel, dial)
 - **Manage multiple profiles** with an intuitive interface
 - **Test configurations** without leaving the Configuration GUI
@@ -42,7 +44,7 @@ Before using the GUI, ensure you have:
 
 1. **Installed the TourBox Elite driver** using `install.sh` (see main README.md)
    - The GUI dependencies are automatically installed by the installer
-2. **Configured your device's MAC address** in `~/.config/tourbox/mappings.conf`
+2. **Configured your device's MAC address** in `~/.config/tourbox/config.conf` (for Bluetooth)
 
 > **Note:** If you performed a manual installation, you'll need to install GUI dependencies separately:
 > ```bash
@@ -59,8 +61,9 @@ tourbox-gui
 
 **What happens on launch:**
 
-1. Loads your existing configuration from `~/.config/tourbox/mappings.conf`
-2. Displays all profiles and button mappings
+1. If you have a legacy config (`mappings.conf`), it will be automatically migrated to individual profile files
+2. Loads your profiles from `~/.config/tourbox/profiles/`
+3. Displays all profiles and button mappings
 
 **On exit:**
 
@@ -151,8 +154,8 @@ The GUI has a 4-panel layout:
    - The Controls Configuration table updates to show "Ctrl+C"
    - Window title shows an asterisk (*) indicating unsaved changes
 5. Click **"Save"** (toolbar or Ctrl+S)
-   - Creates a timestamped backup of your config
-   - Writes the changes to `~/.config/tourbox/mappings.conf`
+   - Creates a timestamped backup of your profile
+   - Writes the changes to `~/.config/tourbox/profiles/<profile>.profile`
    - Automatically applies the new configuration
    - Success dialog confirms the save
 
@@ -287,6 +290,53 @@ When the TourBox driver is running:
 - The Controls Configuration table updates
 - The Control Editor clears
 - Any highlighted control clears
+
+---
+
+## Importing and Exporting Profiles
+
+### Why Import/Export?
+
+- **Share profiles** with other TourBox Elite users
+- **Backup** your custom configurations
+- **Transfer** profiles between computers
+- **Community sharing** - download profiles from other users
+
+### Exporting a Profile
+
+1. **Select the profile** you want to export in the Profiles panel
+2. **Click the Export button** (or use **File > Export Profile...**)
+3. **Choose a location** and filename in the save dialog
+4. **Click Save** to create the `.profile` file
+
+The exported file contains all profile settings:
+- Button and rotary control mappings
+- Modifier button configurations
+- Haptic feedback settings
+- Window matching rules
+- Comments
+
+### Importing a Profile
+
+1. **Click the Import button** (or use **File > Import Profile...**)
+2. **Select a `.profile` file** to import
+3. **Handle name conflicts** (if any):
+   - **Replace** - Delete existing profile and import the new one
+   - **Rename** - Give the imported profile a new name
+4. **The profile appears** in your Profiles panel
+
+### Configuration Migration
+
+When you first launch the GUI after upgrading to version 2.3.0 or later, you may see a migration dialog. This converts your existing configuration from the old single-file format to the new individual profile files.
+
+**Benefits of migration:**
+- Each profile is stored as a separate `.profile` file
+- Easy to share, backup, and manage profiles
+- Better organization for users with many profiles
+
+**Migration is safe:**
+- Your original configuration is backed up
+- You can decline and continue using the old format
 
 ---
 
@@ -731,9 +781,9 @@ Speed up your workflow with keyboard shortcuts:
 
 **Backups:**
 - The GUI automatically creates timestamped backups before each save
-- Located next to your config: `~/.config/tourbox/mappings.conf.backup.YYYYMMDD_HHMMSS`
-- Keeps the 5 most recent backups
-- Restore by copying a backup to `mappings.conf`
+- Located in: `~/.config/tourbox/profiles/<profile>.profile.backup.YYYYMMDD_HHMMSS`
+- Keeps the 5 most recent backups per profile
+- Restore by copying a backup over the original `.profile` file
 
 ### Common Mapping Patterns
 
@@ -835,16 +885,16 @@ To check if a new version of TourBox Elite is available:
 
 ### No Profiles Found
 
-**Problem:** "No profiles found in configuration file"
+**Problem:** "No profiles found in configuration"
 
 **Solutions:**
-1. Check config file exists:
+1. Check profiles directory exists:
    ```bash
-   ls -la ~/.config/tourbox/mappings.conf
+   ls -la ~/.config/tourbox/profiles/
    ```
-2. If missing, run `./install_config.sh` to create it
+2. If missing, run `./install_config.sh` to create default config
 3. Check file permissions (should be readable)
-4. Verify file has at least `[profile:default]` section
+4. Verify at least `default.profile` exists in the profiles directory
 
 ### Changes Not Saving
 
@@ -852,9 +902,9 @@ To check if a new version of TourBox Elite is available:
 
 **Solutions:**
 1. Check for error dialogs (file permissions, disk space)
-2. Verify config file is writable:
+2. Verify profiles directory is writable:
    ```bash
-   ls -la ~/.config/tourbox/mappings.conf
+   ls -la ~/.config/tourbox/profiles/
    ```
 3. Check disk space:
    ```bash
@@ -862,7 +912,7 @@ To check if a new version of TourBox Elite is available:
    ```
 4. Look for backup files (confirms writes are working):
    ```bash
-   ls -la ~/.config/tourbox/mappings.conf.backup.*
+   ls -la ~/.config/tourbox/profiles/*.backup.*
    ```
 
 ### Button Presses Don't Work in When Testing
@@ -885,7 +935,7 @@ To check if a new version of TourBox Elite is available:
    - Start test again
 5. Check MAC address in config:
    ```bash
-   grep mac_address ~/.config/tourbox/mappings.conf
+   grep mac_address ~/.config/tourbox/config.conf
    ```
 
 ### Profile Switching Not Working
@@ -950,14 +1000,15 @@ To check if a new version of TourBox Elite is available:
 **Problem:** Can't load config, syntax errors
 
 **Solutions:**
-1. Restore from automatic backup:
+1. Restore a specific profile from automatic backup:
    ```bash
-   cd ~/.config/tourbox/
-   ls -la mappings.conf.backup.*
-   cp mappings.conf.backup.YYYYMMDD_HHMMSS mappings.conf
+   cd ~/.config/tourbox/profiles/
+   ls -la *.backup.*
+   cp default.profile.backup.YYYYMMDD_HHMMSS default.profile
    ```
-2. Or reset to defaults:
+2. Or reset to defaults (removes all profiles):
    ```bash
+   rm -rf ~/.config/tourbox/profiles ~/.config/tourbox/config.conf
    ./install_config.sh
    ```
    ⚠️ WARNING: Loses all customizations!
@@ -985,14 +1036,24 @@ If you encounter issues not covered here:
 
 ## Appendix: Configuration File Format
 
-The GUI reads and writes to `~/.config/tourbox/mappings.conf`.
+The GUI reads and writes profiles to individual files in `~/.config/tourbox/profiles/`.
 
-**Example:**
+**File Structure:**
+```
+~/.config/tourbox/
+├── config.conf              # Device settings (MAC address, USB port)
+└── profiles/
+    ├── default.profile      # Default profile
+    ├── vscode.profile       # Application-specific profile
+    └── ...
+```
+
+**Example Profile (`default.profile`):**
 ```ini
-[device]
-mac_address = D9:BE:1E:CC:40:D7
+[profile]
+name = default
 
-[profile:default]
+[mappings]
 side = KEY_LEFTMETA
 top = KEY_LEFTSHIFT
 tall = KEY_LEFTALT
@@ -1048,7 +1109,25 @@ The GUI preserves comments and formatting when saving!
 - **"+"** - Create new profile
 - **"⚙"** - Edit profile settings
 - **"-"** - Delete profile
-- **Capture** - Auto-detect window info
+- **Import** - Import a profile from file
+- **Export** - Export selected profile to file
+- **Capture** (in settings) - Auto-detect window info
+
+### Importing and Exporting Profiles
+
+**Exporting a Profile:**
+1. Select the profile you want to export
+2. Click **Export** button or use **File > Export Profile...**
+3. Choose a location and filename
+4. Share the `.profile` file with others
+
+**Importing a Profile:**
+1. Click **Import** button or use **File > Import Profile...**
+2. Select a `.profile` file
+3. If a profile with the same name exists, you can:
+   - **Replace** the existing profile
+   - **Rename** the imported profile
+4. The imported profile appears in your list
 
 ### Testing
 1. Click "Save"
