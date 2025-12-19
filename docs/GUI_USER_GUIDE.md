@@ -120,6 +120,11 @@ The GUI has a 4-panel layout:
   - Export Profile - Export a profile
   - Quit - Exit the application
 
+- **Help Menu:**
+  - Check for Updates - Check GitHub for a newer version
+  - User Guide - Open this documentation
+  - About - Show version and author information
+
 - **Toolbar:** Quick access button for Save
 
 - **Status Bar:** Shows current status, profile name, and operation feedback

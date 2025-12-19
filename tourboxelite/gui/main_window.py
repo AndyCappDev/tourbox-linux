@@ -1050,8 +1050,8 @@ with full GUI configuration support.</p>
 <p><b>Author:</b> Scott Bowman (<a href="https://github.com/AndyCappDev">AndyCappDev</a>)</p>
 <p><a href="https://github.com/AndyCappDev/tourboxelite">Project Homepage</a></p>
 <hr>
-<p>If you find this software useful, please consider<br>
-<a href="https://github.com/AndyCappDev/tourboxelite">giving it a ⭐ on GitHub</a> to help others discover it!</p>
+<p>If you find this software useful, please consider giving it a ⭐ on GitHub<br>
+(click the Star button in the top right of the <a href="https://github.com/AndyCappDev/tourboxelite">project page</a>).</p>
 """
 
         msg = QMessageBox(self)

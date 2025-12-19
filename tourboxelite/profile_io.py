@@ -928,3 +928,109 @@ def create_initial_config(mac_address: str = None) -> Tuple[bool, str]:
     except Exception as ex:
         logger.error(f"Error creating initial config: {ex}")
         return False, f"Error: {ex}"
+
+
+def ensure_tourbox_gui_profile() -> Tuple[bool, str]:
+    """Ensure the TourBox GUI profile exists
+
+    This is called during reinstall to ensure the meta-configuration profile
+    is present even if other profiles exist. The TourBox GUI profile allows
+    the TourBox to control its own configuration GUI.
+
+    Returns:
+        Tuple of (success, message)
+    """
+    from .config_loader import load_profiles_from_legacy_file
+
+    profiles_dir = get_profiles_dir()
+    gui_profile_path = profiles_dir / 'tourbox_gui.profile'
+
+    # Already exists
+    if gui_profile_path.exists():
+        return True, "TourBox GUI profile already exists"
+
+    # Find default_mappings.conf
+    default_config = Path(__file__).parent / 'default_mappings.conf'
+    if not default_config.exists():
+        return False, f"Default config not found: {default_config}"
+
+    try:
+        # Load all profiles from default config
+        profiles = load_profiles_from_legacy_file(str(default_config))
+
+        # Find the TourBox GUI profile
+        gui_profile = None
+        for profile in profiles:
+            if profile.name == 'TourBox GUI':
+                gui_profile = profile
+                break
+
+        if gui_profile is None:
+            return False, "TourBox GUI profile not found in default config"
+
+        # Ensure profiles directory exists
+        profiles_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save the profile
+        if save_profile_to_file(gui_profile, gui_profile_path):
+            logger.info(f"Created TourBox GUI profile: {gui_profile_path}")
+            return True, f"Created TourBox GUI profile"
+        else:
+            return False, "Failed to save TourBox GUI profile"
+
+    except Exception as ex:
+        logger.error(f"Error ensuring TourBox GUI profile: {ex}")
+        return False, f"Error: {ex}"
+
+
+def ensure_default_profile() -> Tuple[bool, str]:
+    """Ensure the default profile exists
+
+    This is called during reinstall to ensure the default profile
+    is present even if other profiles exist. The default profile is
+    the fallback used when no app-specific profile matches.
+
+    Returns:
+        Tuple of (success, message)
+    """
+    from .config_loader import load_profiles_from_legacy_file
+
+    profiles_dir = get_profiles_dir()
+    default_profile_path = profiles_dir / 'default.profile'
+
+    # Already exists
+    if default_profile_path.exists():
+        return True, "Default profile already exists"
+
+    # Find default_mappings.conf
+    default_config = Path(__file__).parent / 'default_mappings.conf'
+    if not default_config.exists():
+        return False, f"Default config not found: {default_config}"
+
+    try:
+        # Load all profiles from default config
+        profiles = load_profiles_from_legacy_file(str(default_config))
+
+        # Find the default profile
+        default_profile = None
+        for profile in profiles:
+            if profile.name == 'default':
+                default_profile = profile
+                break
+
+        if default_profile is None:
+            return False, "Default profile not found in default config"
+
+        # Ensure profiles directory exists
+        profiles_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save the profile
+        if save_profile_to_file(default_profile, default_profile_path):
+            logger.info(f"Created default profile: {default_profile_path}")
+            return True, f"Created default profile"
+        else:
+            return False, "Failed to save default profile"
+
+    except Exception as ex:
+        logger.error(f"Error ensuring default profile: {ex}")
+        return False, f"Error: {ex}"

@@ -12,7 +12,7 @@ from typing import Dict, Optional
 from datetime import datetime
 from evdev import ecodes as e
 
-from tourboxelite.config_loader import get_config_path, BUTTON_CODES, Profile
+from tourboxelite.config_loader import get_config_path, BUTTON_CODES, Profile, create_button_mapping
 from tourboxelite.haptic import HapticStrength, HapticSpeed
 from tourboxelite.profile_io import (
     has_profiles_dir, save_profile_to_file, get_profile_filepath,
@@ -25,6 +25,58 @@ logger = logging.getLogger(__name__)
 def _using_new_format() -> bool:
     """Check if we're using the new multi-file profile format"""
     return has_profiles_dir()
+
+
+def _apply_modifications_to_profile(profile: Profile, modifications: Dict[str, str]) -> None:
+    """Apply control mapping modifications to profile.mapping
+
+    Converts control_name -> action_string to the internal hex code -> events
+    format and updates the profile's mapping dict.
+
+    Args:
+        profile: Profile object to modify
+        modifications: Dict of control_name -> action_string changes
+    """
+    if not modifications:
+        return
+
+    # Rotary controls need special handling (events include press+release in one)
+    ROTARY_CONTROLS = ('scroll_up', 'scroll_down', 'knob_cw', 'knob_ccw', 'dial_cw', 'dial_ccw')
+
+    for control_name, action_str in modifications.items():
+        if control_name not in BUTTON_CODES:
+            logger.warning(f"Unknown control in modifications: {control_name}")
+            continue
+
+        codes = BUTTON_CODES[control_name]
+        if len(codes) != 2:
+            logger.warning(f"Invalid button codes for {control_name}")
+            continue
+
+        press_code, release_code = codes
+        is_rotary = control_name in ROTARY_CONTROLS
+
+        # Handle "none" or empty action
+        if not action_str or action_str.lower() == 'none':
+            # Remove the mapping
+            profile.mapping.pop(bytes([press_code]), None)
+            profile.mapping.pop(bytes([release_code]), None)
+            continue
+
+        # Create events from action string
+        press_events, release_events = create_button_mapping(action_str)
+
+        if is_rotary:
+            # Rotary controls: press events include both press+release
+            profile.mapping[bytes([press_code])] = press_events + release_events
+            profile.mapping[bytes([release_code])] = release_events
+        else:
+            # Regular buttons: separate press and release
+            profile.mapping[bytes([press_code])] = press_events
+            profile.mapping[bytes([release_code])] = release_events
+
+    logger.debug(f"Applied {len(modifications)} modification(s) to profile mapping")
+
 
 # All control names that should be in a profile
 ALL_CONTROLS = [
@@ -120,9 +172,8 @@ def save_profile(profile: Profile, modifications: Dict[str, str]) -> bool:
     """
     # Use new format if profiles directory exists
     if _using_new_format():
-        # Apply modifications to profile mapping
-        # Note: The new format save writes the entire profile, so modifications
-        # should already be applied to the profile object by the caller
+        # Apply modifications to profile mapping before saving
+        _apply_modifications_to_profile(profile, modifications)
         filepath = get_profile_filepath(profile.name)
         return save_profile_to_file(profile, filepath)
 

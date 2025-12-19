@@ -348,6 +348,27 @@ if [ -d "$PROFILES_DIR" ] && [ "$(ls -A "$PROFILES_DIR"/*.profile 2>/dev/null)" 
             fi
         fi
     fi
+
+    # Ensure required profiles exist
+    if [ ! -f "$PROFILES_DIR/default.profile" ]; then
+        echo -e "${YELLOW}!${NC} Default profile missing - recreating..."
+        ./venv/bin/python -c "from tourboxelite.profile_io import ensure_default_profile; success, msg = ensure_default_profile(); print(msg); exit(0 if success else 1)"
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✓${NC} Default profile restored"
+        else
+            echo -e "${YELLOW}!${NC} Warning: Could not restore default profile"
+        fi
+    fi
+
+    if [ ! -f "$PROFILES_DIR/tourbox_gui.profile" ]; then
+        echo -e "${YELLOW}!${NC} TourBox GUI profile missing - recreating..."
+        ./venv/bin/python -c "from tourboxelite.profile_io import ensure_tourbox_gui_profile; success, msg = ensure_tourbox_gui_profile(); print(msg); exit(0 if success else 1)"
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✓${NC} TourBox GUI profile restored"
+        else
+            echo -e "${YELLOW}!${NC} Warning: Could not restore TourBox GUI profile"
+        fi
+    fi
 elif [ -f "$LEGACY_CONFIG_FILE" ]; then
     # Legacy format: mappings.conf exists (will be migrated by GUI)
     echo -e "${YELLOW}!${NC} Legacy config file found: $LEGACY_CONFIG_FILE"

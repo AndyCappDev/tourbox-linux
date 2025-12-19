@@ -1,6 +1,6 @@
 # TourBox Elite / Elite Plus Linux Driver
 
-**Version 2.3.0**
+**Version 2.3.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Linux](https://img.shields.io/badge/platform-linux-lightgrey.svg)](https://www.linux.org/)
@@ -11,7 +11,7 @@
 
 Linux driver for the TourBox Elite and Elite Plus by TourBox Tech Inc. Supports both **USB** and **Bluetooth LE** connections.
 
-> **If you find this useful, please [⭐ star this repo](https://github.com/AndyCappDev/tourboxelite) to help others discover it!**
+> **If you find this useful, please ⭐ star this repo (click the Star button in the top right) to help others discover it!**
 
 ## Features
 
@@ -75,7 +75,7 @@ The driver **auto-detects** the connection type:
 
 ### Step 1: Find Your TourBox MAC Address (Bluetooth only)
 
-**Skip this step if you only plan to use USB.**  Though we recommend setting it up for Bluetooth on the Elite or Elite Plus in case you want to use Bluetooth later.
+**Skip this step if you only plan to use USB or your TourBox is not an Elite or Elite Plus.**  Though we recommend setting it up for Bluetooth on the Elite or Elite Plus in case you want to use Bluetooth later. The driver will still default to USB (when the USB cable is plugged in) even after Bluetooth is configured.
 
 Make sure your TourBox Elite is powered on and NOT connected via USB.
 
@@ -83,7 +83,7 @@ Make sure your TourBox Elite is powered on and NOT connected via USB.
 bluetoothctl devices
 ```
 
-Look for "TourBox Elite" - copy the MAC address (format: `XX:XX:XX:XX:XX:XX`).
+Look for "TourBox Elite" or "TourBox Elite Plus" - copy the MAC address (format: `XX:XX:XX:XX:XX:XX`). You will need it for step 2.
 
 Example output:
 ```
@@ -101,30 +101,10 @@ cd tourboxelite
 The installer will:
 1. Create a Python virtual environment
 2. Install the driver and dependencies
-3. Set up your configuration file - It will ask for the Bluetooth MAC address from setp 1.
+3. Set up your configuration file - It will ask for the Bluetooth MAC address from step 1.
 4. Install and enable the systemd service
 
 Log off and log back on again or reboot
-
-### Step 3: Configure Your MAC Address (Bluetooth only)
-
-**Skip this step if you only use USB.**
-
-If you did not provide the MAC address during installation, edit the configuration file:
-
-```bash
-nano ~/.config/tourbox/config.conf
-```
-
-Find the `[device]` section and set your MAC address:
-
-```ini
-[device]
-mac_address = 12:34:56:78:9A:BC  # Replace with your actual MAC address
-# usb_port = /dev/ttyACM0        # Optional: only if using non-default USB port
-```
-
-Save the file (Ctrl+O, Enter, Ctrl+X in nano).
 
 > **Note:** If you haven't run the GUI yet and you are upgrading, your config may still be in the legacy format at `~/.config/tourbox/mappings.conf`. The GUI will automatically migrate it to the new format on first launch.
 
@@ -188,7 +168,7 @@ The installer will automatically:
 
 The driver includes a **graphical configuration tool** that makes it easy to configure button mappings without editing config files manually.
 
-![TourBox Elite Configuration GUI](docs/images/gui-screenshot.png?v=2.3.0)
+![TourBox Elite Configuration GUI](docs/images/gui-screenshot.png?v=2.3.1)
 
 ### Running the GUI
 
