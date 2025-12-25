@@ -60,18 +60,20 @@ def probe_usb_device(port: str) -> bool:
         # Wait for response
         time.sleep(0.3)
 
-        # Read response - TourBox should respond with ~26 bytes starting with 0x07
+        # Read response - TourBox should respond with ~26 bytes
         response = ser.read(100)
         ser.close()
 
         if response:
             logger.debug(f"  Response from {port}: {response.hex()[:40]}...")
-            # TourBox unlock response starts with 0x07
-            if len(response) >= 1 and response[0] == 0x07:
-                logger.info(f"  Found TourBox at {port}")
+            # TourBox unlock response is typically 26 bytes
+            # Different firmware versions may have different first bytes (0x07, 0x7a, etc.)
+            # Accept any response of reasonable length as a valid TourBox
+            if len(response) >= 20:
+                logger.info(f"  Found TourBox at {port} ({len(response)} bytes)")
                 return True
             else:
-                logger.debug(f"  {port} responded but not a TourBox (first byte: 0x{response[0]:02x})")
+                logger.debug(f"  {port} responded but too short ({len(response)} bytes)")
         else:
             logger.debug(f"  No response from {port}")
 
