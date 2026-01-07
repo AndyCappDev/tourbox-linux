@@ -189,6 +189,10 @@ class TourBoxUSB(TourBoxBase):
                 self._connected = False
                 break
             except Exception as e:
+                if isinstance(e, OSError) and getattr(e, "errno", None) == 5:
+                    logger.warning("USB device I/O error (errno 5); treating as disconnect")
+                    self._connected = False
+                    break
                 logger.error(f"USB read error: {e}")
                 await asyncio.sleep(0.1)
 
