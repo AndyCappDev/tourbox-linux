@@ -11,8 +11,6 @@
 
 Linux driver for the TourBox Lite, Neo, Elite and Elite Plus by TourBox Tech Inc. Connects via **USB** or **Bluetooth LE** with button response so seamless, you'll forget it's not the official driver.
 
-> **If you find this useful, please ⭐ star this repo (click the Star button in the top right) to help others discover it!**
-
 ## Device Compatibility
 
 | Device | Connection | Haptics | Notes |
