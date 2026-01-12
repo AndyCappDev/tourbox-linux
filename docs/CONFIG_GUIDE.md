@@ -12,7 +12,7 @@ Profiles are stored as individual `.profile` files in `~/.config/tourbox/profile
 
 ```
 ~/.config/tourbox/
-├── config.conf              # Device settings only
+├── config.conf              # Device and service settings
 └── profiles/
     ├── default.profile      # Default profile (required)
     ├── davinci_resolve.profile
@@ -129,6 +129,37 @@ Look for "TourBox Elite" or "TourBox Elite Plus" in the output.
 [device]
 mac_address = D9:BE:1E:CC:40:D7
 ```
+
+### `[service]` Section (Optional)
+
+Configures how the GUI manages the driver service. This is primarily useful for systems without systemd (OpenRC, runit, s6, etc.).
+
+**Available settings:**
+- `restart_command` - Custom command to restart the driver service
+
+**Example for OpenRC (Gentoo):**
+```ini
+[service]
+restart_command = rc-service tourbox restart
+```
+
+**Example for runit:**
+```ini
+[service]
+restart_command = sv restart tourbox
+```
+
+**Example for s6:**
+```ini
+[service]
+restart_command = s6-svc -r /run/service/tourbox
+```
+
+**Notes:**
+- If not configured, the GUI will use systemctl (if available)
+- The restart command should work whether the service is running or stopped
+- Saving profiles does NOT require this setting (reload uses direct signal)
+- Only "File → Restart Driver" in the GUI uses this command
 
 ### `[profile:name]` Sections
 

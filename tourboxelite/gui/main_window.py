@@ -1047,13 +1047,13 @@ class TourBoxConfigWindow(QMainWindow):
             else:
                 logger.warning(f"Failed to apply configuration: {reload_message}")
                 self.statusBar().showMessage("Profile saved (configuration not applied)")
+                restart_instructions = DriverManager.get_restart_instructions()
                 QMessageBox.warning(
                     self,
                     "Save Successful (Apply Failed)",
                     f"Profile '{self.current_profile.name}' has been saved.\n\n"
                     f"However, failed to apply the configuration:\n{reload_message}\n\n"
-                    "You may need to manually restart the driver:\n"
-                    "  systemctl --user restart tourbox"
+                    f"You may need to manually restart the driver:\n{restart_instructions}"
                 )
         else:
             self.statusBar().showMessage("Failed to save profile")
