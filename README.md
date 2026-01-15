@@ -1,6 +1,6 @@
 # TourBox Lite / Neo / Elite / Elite Plus Linux Driver
 
-**Version 2.6.0**
+**Version 2.7.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Linux](https://img.shields.io/badge/platform-linux-lightgrey.svg)](https://www.linux.org/)
@@ -156,7 +156,7 @@ The installer will automatically:
 
 The driver includes a **graphical configuration tool** that makes it easy to configure button mappings without editing config files manually.
 
-![TourBox Elite Configuration GUI](docs/images/gui-screenshot.png?v=2.6.0)
+![TourBox Elite Configuration GUI](docs/images/gui-screenshot.png?v=2.7.0)
 
 ### Running the GUI
 

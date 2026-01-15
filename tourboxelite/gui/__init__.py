@@ -3,4 +3,4 @@
 Graphical interface for configuring TourBox Elite button mappings and profiles.
 """
 
-__version__ = "2.6.0"
+__version__ = "2.7.0"
