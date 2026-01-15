@@ -270,6 +270,35 @@ The driver can also be run manually:
 /path/to/tourbox-linux/venv/bin/python -m tourboxelite
 ```
 
+#### Example OpenRC Init Script (Gentoo)
+
+Create `/etc/init.d/tourbox`:
+
+```sh
+#!/sbin/openrc-run
+
+name="TourBox Elite Driver"
+description="Open source driver for TourBox Elite"
+command="/home/USER/tourbox-linux/venv/bin/python"
+command_args="-m tourboxelite"
+command_background=true
+command_user="USER:USER"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+depend() {
+    need localmount
+    after bootmisc
+}
+```
+
+Replace `USER` with your username (in three places) and update the path if needed. Then:
+
+```bash
+sudo chmod +x /etc/init.d/tourbox
+sudo rc-update add tourbox default
+sudo rc-service tourbox start
+```
+
 ## Configuration
 
 The easiest way to configure button mappings is with the **graphical configuration tool** (see below). For manual editing, profiles are stored in `~/.config/tourbox/profiles/` as individual `.profile` files.
