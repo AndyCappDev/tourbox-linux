@@ -85,6 +85,7 @@ class WaylandWindowMonitor:
             ('hyprland', self._test_hyprland),
             ('gnome', self._test_gnome),
             ('kde', self._test_kde),
+            ('niri', self._test_niri),
         ]
 
         for name, test_func in detectors:
@@ -101,6 +102,18 @@ class WaylandWindowMonitor:
         try:
             result = subprocess.run(
                 ['swaymsg', '-t', 'get_version'],
+                capture_output=True,
+                timeout=1
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
+
+    def _test_niri(self) -> bool:
+        """Test if Niri is running"""
+        try:
+            result = subprocess.run(
+                ['niri', 'msg', 'version'],
                 capture_output=True,
                 timeout=1
             )
@@ -165,6 +178,8 @@ class WaylandWindowMonitor:
                 return self._get_gnome_window()
             elif self.compositor == 'kde':
                 return self._get_kde_window()
+            elif self.compositor == 'niri':
+                return self._get_niri_window()
         except Exception as e:
             logger.error(f"Error getting active window: {e}")
             return None
@@ -232,6 +247,31 @@ class WaylandWindowMonitor:
             )
         except Exception as e:
             logger.debug(f"Hyprland window detection error: {e}")
+
+        return None
+
+    def _get_niri_window(self) -> Optional[WindowInfo]:
+        """Get active window from Niri"""
+        try:
+            result = subprocess.run(
+                ['niri', 'msg', '--json', "focused-window"],
+                capture_output=True,
+                text=True,
+                timeout=1
+            )
+
+            if result.returncode != 0:
+                return None
+
+            window = json.loads(result.stdout)
+
+            return WindowInfo(
+                app_id=window.get('app_id', ''),
+                title=window.get('title', ''),
+                wm_class=window.get('app_id', '')
+            )
+        except Exception as e:
+            logger.debug(f"Niri window detection error: {e}")
 
         return None
 

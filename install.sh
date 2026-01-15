@@ -169,24 +169,35 @@ else
     echo -e "${GREEN}✓${NC} User is in input group"
 fi
 
-# Check if user is in dialout group (for USB access)
-if ! groups | grep -q '\bdialout\b'; then
-    echo -e "${YELLOW}!${NC} User '$USER' is not in the 'dialout' group"
+# Check if user is in a serial ports group (for USB access)
+SERIAL_PORTS_GROUP=""
+
+if getent group dialout >/dev/null; then
+    SERIAL_PORTS_GROUP="dialout"
+elif getent group uucp >/dev/null; then
+    SERIAL_PORTS_GROUP="uucp"
+else
+    echo -e "${RED}Error: No serial port group found - attempted: dialout, uucp${NC}"
+    exit 1
+fi
+
+if ! groups | grep -q "\b$SERIAL_PORTS_GROUP\b"; then
+    echo -e "${YELLOW}!${NC} User '$USER' is not in the '$SERIAL_PORTS_GROUP' group"
     echo ""
-    echo "The driver needs dialout group for USB serial port access."
+    echo "The driver needs $SERIAL_PORTS_GROUP group for USB serial port access."
     echo ""
-    echo "Adding user to dialout group (requires sudo):"
-    sudo usermod -a -G dialout $USER
+    echo "Adding user to $SERIAL_PORTS_GROUP group (requires sudo):"
+    sudo usermod -a -G $SERIAL_PORTS_GROUP $USER
 
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓${NC} User added to dialout group"
+        echo -e "${GREEN}✓${NC} User added to $SERIAL_PORTS_GROUP group"
         NEED_RELOGIN=true
     else
-        echo -e "${RED}Error: Failed to add user to dialout group${NC}"
+        echo -e "${RED}Error: Failed to add user to $SERIAL_PORTS_GROUP group${NC}"
         exit 1
     fi
 else
-    echo -e "${GREEN}✓${NC} User is in dialout group"
+    echo -e "${GREEN}✓${NC} User is in $SERIAL_PORTS_GROUP group"
 fi
 
 # Set up udev rule for /dev/uinput permissions
