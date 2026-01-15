@@ -1,20 +1,115 @@
 #!/usr/bin/env python3
 """Driver service management for TourBox Elite
 
-Handles starting, stopping, and checking status of the systemd service.
+Handles starting, stopping, and checking status of the driver service.
+Supports both systemd and non-systemd init systems via configurable commands.
 """
 
 import subprocess
 import logging
-from typing import Tuple
+import shutil
+import os
+from pathlib import Path
+from typing import Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class DriverManager:
-    """Manages the TourBox Elite driver systemd service"""
+    """Manages the TourBox Elite driver service
+
+    This class provides init-system-agnostic control of the driver:
+    - reload_driver(): Uses direct SIGHUP signal (works on any system)
+    - restart_driver(): Uses configurable command, falls back to systemctl
+    - is_running(): Uses pgrep (works on any system)
+
+    For non-systemd systems (OpenRC, runit, etc.), users can configure
+    a custom restart_command in ~/.config/tourbox/config.conf:
+
+    [service]
+    restart_command = rc-service tourbox restart
+    """
 
     SERVICE_NAME = "tourbox"
+    DRIVER_MODULE = "tourboxelite"
+
+    _restart_command_cache: Optional[str] = None
+    _systemctl_available: Optional[bool] = None
+
+    @staticmethod
+    def _get_config_path() -> Path:
+        """Get path to config.conf"""
+        return Path.home() / '.config' / 'tourbox' / 'config.conf'
+
+    @staticmethod
+    def _get_restart_command() -> Optional[str]:
+        """Get custom restart command from config, if configured
+
+        Returns:
+            Custom restart command string, or None if not configured
+        """
+        if DriverManager._restart_command_cache is not None:
+            return DriverManager._restart_command_cache if DriverManager._restart_command_cache else None
+
+        config_path = DriverManager._get_config_path()
+        if not config_path.exists():
+            DriverManager._restart_command_cache = ""
+            return None
+
+        try:
+            import configparser
+            config = configparser.ConfigParser()
+            config.read(config_path)
+
+            if config.has_option('service', 'restart_command'):
+                cmd = config.get('service', 'restart_command').strip()
+                DriverManager._restart_command_cache = cmd
+                if cmd:
+                    logger.info(f"Using custom restart command: {cmd}")
+                    return cmd
+        except Exception as e:
+            logger.warning(f"Error reading restart_command from config: {e}")
+
+        DriverManager._restart_command_cache = ""
+        return None
+
+    @staticmethod
+    def _is_systemctl_available() -> bool:
+        """Check if systemctl is available on this system"""
+        if DriverManager._systemctl_available is not None:
+            return DriverManager._systemctl_available
+
+        DriverManager._systemctl_available = shutil.which('systemctl') is not None
+        return DriverManager._systemctl_available
+
+    @staticmethod
+    def _get_driver_pids() -> list:
+        """Get PIDs of running driver processes
+
+        Returns:
+            List of PID strings for running tourboxelite processes
+        """
+        try:
+            # Use pgrep to find Python processes running tourboxelite
+            # -f matches against full command line
+            result = subprocess.run(
+                ['pgrep', '-f', f'python.*-m.*{DriverManager.DRIVER_MODULE}'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                pids = result.stdout.strip().split('\n')
+                # Filter out our own process (the GUI)
+                our_pid = str(os.getpid())
+                parent_pid = str(os.getppid())
+                return [pid for pid in pids if pid and pid != our_pid and pid != parent_pid]
+            return []
+
+        except Exception as e:
+            logger.debug(f"pgrep failed: {e}")
+            return []
 
     @staticmethod
     def stop_driver() -> Tuple[bool, str]:
@@ -23,30 +118,45 @@ class DriverManager:
         Returns:
             Tuple of (success, message)
         """
-        try:
-            result = subprocess.run(
-                ['systemctl', '--user', 'stop', DriverManager.SERVICE_NAME],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+        # Try systemctl first if available
+        if DriverManager._is_systemctl_available():
+            try:
+                result = subprocess.run(
+                    ['systemctl', '--user', 'stop', DriverManager.SERVICE_NAME],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
 
-            if result.returncode == 0:
-                logger.info("Driver stopped successfully")
-                return True, "Driver stopped successfully"
-            else:
-                error_msg = f"Failed to stop driver: {result.stderr}"
+                if result.returncode == 0:
+                    logger.info("Driver stopped successfully via systemctl")
+                    return True, "Driver stopped successfully"
+                else:
+                    error_msg = f"Failed to stop driver: {result.stderr}"
+                    logger.error(error_msg)
+                    return False, error_msg
+
+            except subprocess.TimeoutExpired:
+                error_msg = "Timeout stopping driver"
                 logger.error(error_msg)
                 return False, error_msg
+            except Exception as e:
+                error_msg = f"Error stopping driver: {e}"
+                logger.error(error_msg)
+                return False, error_msg
+        else:
+            # No systemctl - try to kill the process directly
+            pids = DriverManager._get_driver_pids()
+            if not pids:
+                return True, "Driver is not running"
 
-        except subprocess.TimeoutExpired:
-            error_msg = "Timeout stopping driver"
-            logger.error(error_msg)
-            return False, error_msg
-        except Exception as e:
-            error_msg = f"Error stopping driver: {e}"
-            logger.error(error_msg)
-            return False, error_msg
+            try:
+                for pid in pids:
+                    subprocess.run(['kill', pid], timeout=5)
+                logger.info("Driver stopped via kill signal")
+                return True, "Driver stopped successfully"
+            except Exception as e:
+                return False, f"Failed to stop driver: {e}"
 
     @staticmethod
     def start_driver() -> Tuple[bool, str]:
@@ -55,62 +165,72 @@ class DriverManager:
         Returns:
             Tuple of (success, message)
         """
-        try:
-            result = subprocess.run(
-                ['systemctl', '--user', 'start', DriverManager.SERVICE_NAME],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+        if DriverManager._is_systemctl_available():
+            try:
+                result = subprocess.run(
+                    ['systemctl', '--user', 'start', DriverManager.SERVICE_NAME],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
 
-            if result.returncode == 0:
-                logger.info("Driver started successfully")
-                return True, "Driver started successfully"
-            else:
-                error_msg = f"Failed to start driver: {result.stderr}"
+                if result.returncode == 0:
+                    logger.info("Driver started successfully")
+                    return True, "Driver started successfully"
+                else:
+                    error_msg = f"Failed to start driver: {result.stderr}"
+                    logger.error(error_msg)
+                    return False, error_msg
+
+            except subprocess.TimeoutExpired:
+                error_msg = "Timeout starting driver"
                 logger.error(error_msg)
                 return False, error_msg
-
-        except subprocess.TimeoutExpired:
-            error_msg = "Timeout starting driver"
-            logger.error(error_msg)
-            return False, error_msg
-        except Exception as e:
-            error_msg = f"Error starting driver: {e}"
-            logger.error(error_msg)
-            return False, error_msg
+            except Exception as e:
+                error_msg = f"Error starting driver: {e}"
+                logger.error(error_msg)
+                return False, error_msg
+        else:
+            return False, (
+                "Cannot start driver: systemctl not available.\n"
+                "Please start the driver using your init system's commands."
+            )
 
     @staticmethod
     def reload_driver() -> Tuple[bool, str]:
         """Apply new configuration to the TourBox driver via SIGHUP
 
-        Sends SIGHUP signal to the driver process to reload its configuration
-        without restarting the service.
+        Sends SIGHUP signal directly to the driver process to reload its
+        configuration without restarting the service. This method works
+        regardless of init system (systemd, OpenRC, runit, etc.).
 
         Returns:
             Tuple of (success, message)
         """
         try:
-            # Use systemctl kill --signal=SIGHUP to send the signal
-            result = subprocess.run(
-                ['systemctl', '--user', 'kill', '--signal=SIGHUP', DriverManager.SERVICE_NAME],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            # Find the driver process(es) and send SIGHUP directly
+            pids = DriverManager._get_driver_pids()
 
-            if result.returncode == 0:
-                logger.info("Configuration reload signal sent successfully")
-                return True, "Configuration applied"
-            else:
-                error_msg = f"Failed to apply configuration: {result.stderr}"
-                logger.error(error_msg)
-                return False, error_msg
+            if not pids:
+                logger.warning("No driver process found to reload")
+                return False, "Driver is not running"
 
-        except subprocess.TimeoutExpired:
-            error_msg = "Timeout applying configuration"
-            logger.error(error_msg)
-            return False, error_msg
+            # Send SIGHUP to each driver process
+            for pid in pids:
+                try:
+                    subprocess.run(
+                        ['kill', '-HUP', pid],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    logger.info(f"Sent SIGHUP to driver process {pid}")
+                except Exception as e:
+                    logger.warning(f"Failed to send SIGHUP to {pid}: {e}")
+
+            logger.info("Configuration reload signal sent successfully")
+            return True, "Configuration applied"
+
         except Exception as e:
             error_msg = f"Error applying configuration: {e}"
             logger.error(error_msg)
@@ -120,53 +240,116 @@ class DriverManager:
     def restart_driver() -> Tuple[bool, str]:
         """Restart the TourBox driver service
 
+        Uses custom restart_command from config if configured,
+        otherwise falls back to systemctl if available.
+
         Returns:
             Tuple of (success, message)
         """
-        try:
-            result = subprocess.run(
-                ['systemctl', '--user', 'restart', DriverManager.SERVICE_NAME],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+        # Check for custom restart command first
+        custom_cmd = DriverManager._get_restart_command()
 
-            if result.returncode == 0:
-                logger.info("Driver restarted successfully")
-                return True, "Driver restarted successfully"
-            else:
-                error_msg = f"Failed to restart driver: {result.stderr}"
+        if custom_cmd:
+            try:
+                logger.info(f"Using custom restart command: {custom_cmd}")
+                result = subprocess.run(
+                    custom_cmd,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+
+                if result.returncode == 0:
+                    logger.info("Driver restarted successfully via custom command")
+                    return True, "Driver restarted successfully"
+                else:
+                    error_msg = f"Failed to restart driver: {result.stderr or result.stdout}"
+                    logger.error(error_msg)
+                    return False, error_msg
+
+            except subprocess.TimeoutExpired:
+                error_msg = "Timeout restarting driver"
+                logger.error(error_msg)
+                return False, error_msg
+            except Exception as e:
+                error_msg = f"Error restarting driver: {e}"
                 logger.error(error_msg)
                 return False, error_msg
 
-        except subprocess.TimeoutExpired:
-            error_msg = "Timeout restarting driver"
-            logger.error(error_msg)
-            return False, error_msg
-        except Exception as e:
-            error_msg = f"Error restarting driver: {e}"
-            logger.error(error_msg)
-            return False, error_msg
+        # Fall back to systemctl if available
+        if DriverManager._is_systemctl_available():
+            try:
+                result = subprocess.run(
+                    ['systemctl', '--user', 'restart', DriverManager.SERVICE_NAME],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+
+                if result.returncode == 0:
+                    logger.info("Driver restarted successfully via systemctl")
+                    return True, "Driver restarted successfully"
+                else:
+                    error_msg = f"Failed to restart driver: {result.stderr}"
+                    logger.error(error_msg)
+                    return False, error_msg
+
+            except subprocess.TimeoutExpired:
+                error_msg = "Timeout restarting driver"
+                logger.error(error_msg)
+                return False, error_msg
+            except Exception as e:
+                error_msg = f"Error restarting driver: {e}"
+                logger.error(error_msg)
+                return False, error_msg
+
+        # Neither custom command nor systemctl available
+        return False, (
+            "Cannot restart driver: no restart command configured and systemctl not available.\n\n"
+            "To configure a custom restart command, add to ~/.config/tourbox/config.conf:\n\n"
+            "[service]\n"
+            "restart_command = your-restart-command-here\n\n"
+            "Examples:\n"
+            "  OpenRC: rc-service tourbox restart\n"
+            "  Manual: pkill -f 'python.*tourboxelite' ; /path/to/start-tourbox.sh"
+        )
 
     @staticmethod
     def is_running() -> bool:
         """Check if the driver service is currently running
 
+        Uses pgrep to check for running driver processes, which works
+        regardless of init system.
+
         Returns:
             True if running, False otherwise
         """
         try:
-            result = subprocess.run(
-                ['systemctl', '--user', 'is-active', DriverManager.SERVICE_NAME],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-
-            is_active = result.returncode == 0 and result.stdout.strip() == 'active'
-            logger.debug(f"Driver running status: {is_active}")
+            pids = DriverManager._get_driver_pids()
+            is_active = len(pids) > 0
+            logger.debug(f"Driver running status: {is_active} (pids: {pids})")
             return is_active
 
         except Exception as e:
             logger.error(f"Error checking driver status: {e}")
             return False
+
+    @staticmethod
+    def get_restart_instructions() -> str:
+        """Get appropriate restart instructions for the current system
+
+        Returns:
+            String with restart instructions appropriate for the init system
+        """
+        custom_cmd = DriverManager._get_restart_command()
+        if custom_cmd:
+            return f"  {custom_cmd}"
+        elif DriverManager._is_systemctl_available():
+            return "  systemctl --user restart tourbox"
+        else:
+            return (
+                "Configure a restart command in ~/.config/tourbox/config.conf:\n"
+                "  [service]\n"
+                "  restart_command = your-restart-command-here"
+            )

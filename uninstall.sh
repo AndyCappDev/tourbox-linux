@@ -24,27 +24,43 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Stop service if running
-if systemctl --user is-active --quiet tourbox 2>/dev/null; then
-    echo "Stopping TourBox service..."
-    systemctl --user stop tourbox
-    echo -e "${GREEN}✓${NC} Service stopped"
+# Check if systemd is available
+HAS_SYSTEMD=false
+if command -v systemctl &> /dev/null && systemctl --user status &> /dev/null; then
+    HAS_SYSTEMD=true
 fi
 
-# Disable service if enabled
-if systemctl --user is-enabled --quiet tourbox 2>/dev/null; then
-    echo "Disabling TourBox service..."
-    systemctl --user disable tourbox
-    echo -e "${GREEN}✓${NC} Service disabled"
-fi
+if [ "$HAS_SYSTEMD" = "true" ]; then
+    # Stop service if running
+    if systemctl --user is-active --quiet tourbox 2>/dev/null; then
+        echo "Stopping TourBox service..."
+        systemctl --user stop tourbox
+        echo -e "${GREEN}✓${NC} Service stopped"
+    fi
 
-# Remove systemd service file
-SERVICE_FILE="$HOME/.config/systemd/user/tourbox.service"
-if [ -f "$SERVICE_FILE" ]; then
-    echo "Removing systemd service..."
-    rm "$SERVICE_FILE"
-    systemctl --user daemon-reload
-    echo -e "${GREEN}✓${NC} Service file removed"
+    # Disable service if enabled
+    if systemctl --user is-enabled --quiet tourbox 2>/dev/null; then
+        echo "Disabling TourBox service..."
+        systemctl --user disable tourbox
+        echo -e "${GREEN}✓${NC} Service disabled"
+    fi
+
+    # Remove systemd service file
+    SERVICE_FILE="$HOME/.config/systemd/user/tourbox.service"
+    if [ -f "$SERVICE_FILE" ]; then
+        echo "Removing systemd service..."
+        rm "$SERVICE_FILE"
+        systemctl --user daemon-reload
+        echo -e "${GREEN}✓${NC} Service file removed"
+    fi
+else
+    # Non-systemd system - try to stop any running driver process
+    if pgrep -f "python.*tourboxelite" > /dev/null 2>&1; then
+        echo "Stopping TourBox driver process..."
+        pkill -f "python.*tourboxelite" 2>/dev/null || true
+        echo -e "${GREEN}✓${NC} Driver process stopped"
+    fi
+    echo -e "${YELLOW}!${NC} Non-systemd system - please remove any init scripts you created manually"
 fi
 
 # Ask about config files

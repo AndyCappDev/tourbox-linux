@@ -372,27 +372,34 @@ else
     fi
 fi
 
-# Install systemd service
-echo ""
-echo "=========================================="
-echo "Systemd Service Setup"
-echo "=========================================="
-echo ""
-
-SYSTEMD_DIR="$HOME/.config/systemd/user"
-SERVICE_FILE="$SYSTEMD_DIR/tourbox.service"
-
-mkdir -p "$SYSTEMD_DIR"
-
-# Stop service if it's currently running
-if systemctl --user is-active --quiet tourbox; then
-    echo -e "${YELLOW}!${NC} Stopping running service..."
-    systemctl --user stop tourbox
-    echo -e "${GREEN}✓${NC} Service stopped"
+# Check if systemd is available
+HAS_SYSTEMD=false
+if command -v systemctl &> /dev/null && systemctl --user status &> /dev/null; then
+    HAS_SYSTEMD=true
 fi
 
-# Create service file
-cat > "$SERVICE_FILE" <<EOF
+if [ "$HAS_SYSTEMD" = "true" ]; then
+    # Install systemd service
+    echo ""
+    echo "=========================================="
+    echo "Systemd Service Setup"
+    echo "=========================================="
+    echo ""
+
+    SYSTEMD_DIR="$HOME/.config/systemd/user"
+    SERVICE_FILE="$SYSTEMD_DIR/tourbox.service"
+
+    mkdir -p "$SYSTEMD_DIR"
+
+    # Stop service if it's currently running
+    if systemctl --user is-active --quiet tourbox; then
+        echo -e "${YELLOW}!${NC} Stopping running service..."
+        systemctl --user stop tourbox
+        echo -e "${GREEN}✓${NC} Service stopped"
+    fi
+
+    # Create service file
+    cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=TourBox Linux Driver
 After=graphical-session.target
@@ -408,47 +415,73 @@ RestartSec=5
 WantedBy=graphical-session.target
 EOF
 
-echo -e "${GREEN}✓${NC} Installed systemd service"
+    echo -e "${GREEN}✓${NC} Installed systemd service"
 
-# Reload systemd
-systemctl --user daemon-reload
-echo -e "${GREEN}✓${NC} Reloaded systemd daemon"
+    # Reload systemd
+    systemctl --user daemon-reload
+    echo -e "${GREEN}✓${NC} Reloaded systemd daemon"
 
-# Ask about enabling service
-echo ""
-read -p "Enable TourBox service to start on login? (Y/n): " -n 1 -r
-echo ""
-
-if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-    systemctl --user enable tourbox
-    echo -e "${GREEN}✓${NC} Service enabled (will start on login)"
-    SERVICE_ENABLED=true
-else
-    echo -e "${YELLOW}!${NC} Service not enabled (won't start automatically)"
-    SERVICE_ENABLED=false
-fi
-
-# Ask about starting service now (only if no relogin required)
-if [ "$NEED_RELOGIN" != "true" ]; then
+    # Ask about enabling service
     echo ""
-    read -p "Start TourBox service now? (Y/n): " -n 1 -r
+    read -p "Enable TourBox service to start on login? (Y/n): " -n 1 -r
     echo ""
 
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-        systemctl --user restart tourbox
-        sleep 2
-
-        if systemctl --user is-active --quiet tourbox; then
-            echo -e "${GREEN}✓${NC} Service is running"
-        else
-            echo -e "${RED}✗${NC} Service failed to start"
-            echo ""
-            echo "Check logs with: journalctl --user -u tourbox -n 50"
-            exit 1
-        fi
+        systemctl --user enable tourbox
+        echo -e "${GREEN}✓${NC} Service enabled (will start on login)"
+        SERVICE_ENABLED=true
     else
-        echo -e "${YELLOW}!${NC} Service not started"
+        echo -e "${YELLOW}!${NC} Service not enabled (won't start automatically)"
+        SERVICE_ENABLED=false
     fi
+
+    # Ask about starting service now (only if no relogin required)
+    if [ "$NEED_RELOGIN" != "true" ]; then
+        echo ""
+        read -p "Start TourBox service now? (Y/n): " -n 1 -r
+        echo ""
+
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            systemctl --user restart tourbox
+            sleep 2
+
+            if systemctl --user is-active --quiet tourbox; then
+                echo -e "${GREEN}✓${NC} Service is running"
+            else
+                echo -e "${RED}✗${NC} Service failed to start"
+                echo ""
+                echo "Check logs with: journalctl --user -u tourbox -n 50"
+                exit 1
+            fi
+        else
+            echo -e "${YELLOW}!${NC} Service not started"
+        fi
+    fi
+else
+    # Non-systemd system (OpenRC, runit, etc.)
+    echo ""
+    echo "=========================================="
+    echo "Service Setup (Non-Systemd)"
+    echo "=========================================="
+    echo ""
+    echo -e "${YELLOW}!${NC} systemd not detected - skipping automatic service setup"
+    echo ""
+    echo "You will need to create an init script for your init system."
+    echo ""
+    echo "The driver can be started manually with:"
+    echo "  $SCRIPT_DIR/venv/bin/python -m tourboxelite"
+    echo ""
+    echo "For the GUI to restart the driver, configure a restart command in"
+    echo "~/.config/tourbox/config.conf:"
+    echo ""
+    echo "  [service]"
+    echo "  restart_command = your-restart-command-here"
+    echo ""
+    echo "Examples:"
+    echo "  OpenRC:  rc-service tourbox restart"
+    echo "  runit:   sv restart tourbox"
+    echo "  s6:      s6-svc -r /run/service/tourbox"
+    echo ""
 fi
 
 # Final summary
@@ -459,14 +492,20 @@ echo -e "${BLUE}========================================${NC}"
 echo ""
 echo "Installed to: $SCRIPT_DIR"
 echo "Config file:  $CONFIG_FILE"
-echo "Service file: $SERVICE_FILE"
-echo ""
-echo "Useful commands:"
-echo "  Start:   systemctl --user start tourbox"
-echo "  Stop:    systemctl --user stop tourbox"
-echo "  Status:  systemctl --user status tourbox"
-echo "  Logs:    journalctl --user -u tourbox -f"
-echo "  Restart: systemctl --user restart tourbox"
+
+if [ "$HAS_SYSTEMD" = "true" ]; then
+    echo "Service file: $SERVICE_FILE"
+    echo ""
+    echo "Useful commands:"
+    echo "  Start:   systemctl --user start tourbox"
+    echo "  Stop:    systemctl --user stop tourbox"
+    echo "  Status:  systemctl --user status tourbox"
+    echo "  Logs:    journalctl --user -u tourbox -f"
+    echo "  Restart: systemctl --user restart tourbox"
+else
+    echo ""
+    echo "Driver command: $SCRIPT_DIR/venv/bin/python -m tourboxelite"
+fi
 echo ""
 echo "To customize button mappings:"
 echo "  Option 1 - Use the GUI (recommended):"
@@ -475,7 +514,11 @@ echo "    - Or find 'TourBox Configuration' in your app menu"
 echo ""
 echo "  Option 2 - Edit config file manually:"
 echo "    nano $CONFIG_FILE"
-echo "    systemctl --user restart tourbox  # Apply changes"
+if [ "$HAS_SYSTEMD" = "true" ]; then
+    echo "    systemctl --user restart tourbox  # Apply changes"
+else
+    echo "    # Then restart your driver service to apply changes"
+fi
 echo ""
 
 if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
@@ -554,13 +597,19 @@ if [ "$NEED_RELOGIN" = "true" ]; then
     echo -e "${YELLOW}║  before the TourBox driver will work!                          ║${NC}"
     echo -e "${YELLOW}║                                                                ║${NC}"
     echo -e "${YELLOW}║  This is required for the input group membership to activate.  ║${NC}"
-    if [ "$SERVICE_ENABLED" = "true" ]; then
-        echo -e "${YELLOW}║                                                                ║${NC}"
-        echo -e "${YELLOW}║  The service will start automatically when you log back in.    ║${NC}"
+    if [ "$HAS_SYSTEMD" = "true" ]; then
+        if [ "$SERVICE_ENABLED" = "true" ]; then
+            echo -e "${YELLOW}║                                                                ║${NC}"
+            echo -e "${YELLOW}║  The service will start automatically when you log back in.    ║${NC}"
+        else
+            echo -e "${YELLOW}║                                                                ║${NC}"
+            echo -e "${YELLOW}║  After logging back in, start the service with:                ║${NC}"
+            echo -e "${YELLOW}║    systemctl --user start tourbox                              ║${NC}"
+        fi
     else
         echo -e "${YELLOW}║                                                                ║${NC}"
-        echo -e "${YELLOW}║  After logging back in, start the service with:                ║${NC}"
-        echo -e "${YELLOW}║    systemctl --user start tourbox                              ║${NC}"
+        echo -e "${YELLOW}║  After logging back in, start the driver using your init       ║${NC}"
+        echo -e "${YELLOW}║  system or run it manually.                                     ║${NC}"
     fi
     echo -e "${YELLOW}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo ""

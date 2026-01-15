@@ -32,6 +32,7 @@ Linux driver for the TourBox Lite, Neo, Elite and Elite Plus by TourBox Tech Inc
 - ✅ **Modifier Keys** - Create over 250 unique key combinations per profile using physical buttons as modifiers
 - ✅ **Import/Export Profiles** - Import and Export profiles to share with the community
 - ✅ **Systemd Integration** - Runs as a user service, starts on login
+- ✅ **Non-Systemd Support** - Works with OpenRC, runit, s6, and other init systems
 
 ## Requirements
 
@@ -78,7 +79,7 @@ The driver **auto-detects** everything:
 - **USB:** Scans `/dev/ttyACM*` devices and probes each for a TourBox response
 - **Bluetooth:** Scans for any device named "TourBox" and connects automatically
 
-> **Note:** For Bluetooth, some Elite models do not require pairing depending on what firmware is installed on them. The driver finds your TourBox automatically by scanning for its name. If the driver doesn't find your TourBox, try putting it in pairing mode (hold the button above the power switch for 2-3 seconds until the LED flashes) and restart the driver with `File->Restart Driver` in the Configuration GUI. After the first successful connection, normal power cycles should reconnect automatically without needing pairing mode again.
+> **Note:** Some Bluetooth equipped models do not require pairing depending on what firmware is installed on them. The driver finds your TourBox automatically by scanning for its name. If the driver doesn't find your TourBox, try putting it in pairing mode (hold the button above the power switch for 2-3 seconds until the LED flashes) and restart the driver with `File->Restart Driver` in the Configuration GUI. After the first successful connection, normal power cycles should reconnect automatically without needing pairing mode again.
 
 ### Run the Installer
 
@@ -242,6 +243,60 @@ nano ~/.config/systemd/user/tourbox.service
 systemctl --user daemon-reload
 systemctl --user enable tourbox
 systemctl --user start tourbox
+```
+
+### Non-Systemd Systems (OpenRC, runit, etc.)
+
+The driver works on systems without systemd. The installer will detect this and skip systemd service setup. You'll need to:
+
+1. **Create your own init script** for your init system (OpenRC, runit, s6, etc.)
+
+2. **Configure a restart command** for the GUI to use when restarting the driver. Add to `~/.config/tourbox/config.conf`:
+
+```ini
+[service]
+restart_command = rc-service tourbox restart
+```
+
+Examples for different init systems:
+- **OpenRC:** `rc-service tourbox restart`
+- **runit:** `sv restart tourbox`
+- **s6:** `s6-svc -r /run/service/tourbox`
+
+**Note:** Saving profiles in the GUI works without any configuration (it sends a reload signal directly to the driver process). Only the "File → Restart Driver" menu option requires the custom command.
+
+The driver can also be run manually:
+```bash
+/path/to/tourbox-linux/venv/bin/python -m tourboxelite
+```
+
+#### Example OpenRC Init Script (Gentoo)
+
+Create `/etc/init.d/tourbox`:
+
+```sh
+#!/sbin/openrc-run
+
+name="TourBox Elite Driver"
+description="Open source driver for TourBox Elite"
+command="/home/USER/tourbox-linux/venv/bin/python"
+command_args="-m tourboxelite"
+command_background=true
+command_user="USER:USER"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+depend() {
+    need localmount
+    after bootmisc
+}
+```
+
+Replace `USER` with your username (in three places) and update the path if needed. Then:
+
+```bash
+sudo chmod +x /etc/init.d/tourbox
+sudo rc-update add tourbox default
+sudo rc-service tourbox start
 ```
 
 ## Configuration

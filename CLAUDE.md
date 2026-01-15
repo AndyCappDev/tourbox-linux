@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TourBox Linux is a Python driver for TourBox input devices (Elite, Elite Plus, Neo, Lite) on Linux. It supports USB serial and Bluetooth LE connections, includes a PySide6-based GUI for configuration, and runs as a systemd user service.
+TourBox Linux is a Python driver for TourBox input devices (Elite, Elite Plus, Neo, Lite) on Linux. It supports USB serial and Bluetooth LE connections, includes a PySide6-based GUI for configuration, and runs as a user service (systemd or other init systems like OpenRC, runit, s6).
 
 ## Build & Development Commands
 
@@ -68,15 +68,21 @@ TourBoxBase (device_base.py)     - Abstract base with shared logic
 - `control_editor.py` - Key capture and mapping editor
 - `controller_view.py` - SVG-based visual controller representation
 - `config_writer.py` - Atomic config file writes with backup rotation
-- `driver_manager.py` - systemd service status and control
+- `driver_manager.py` - Service control (init-agnostic: systemd, OpenRC, runit, etc.)
 
 ## Configuration
 
 User config location: `~/.config/tourbox/`
-- `config.conf` - Main configuration file
+- `config.conf` - Device settings and optional `[service]` section for non-systemd systems
 - `profiles/` - Individual `.profile` files
 
 Template: `tourboxelite/default_mappings.conf`
+
+For non-systemd systems, users can configure a custom restart command in `config.conf`:
+```ini
+[service]
+restart_command = rc-service tourbox restart
+```
 
 ## Dependencies
 
