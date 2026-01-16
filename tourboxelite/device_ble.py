@@ -114,7 +114,8 @@ class TourBoxBLE(TourBoxBase):
 
         Wraps the base class process_button_code method for BLE notifications.
         """
-        self.process_button_code(data)
+        for byte in data:
+            self.process_button_code(bytearray([byte]))
 
     async def send_haptic_config(self):
         """Send haptic configuration to the device
