@@ -13,6 +13,8 @@ from typing import Optional
 
 from bleak import BleakClient, BleakScanner
 from bleak.backends.device import BLEDevice
+from dbus_fast.aio import MessageBus
+from dbus_fast import BusType, Message
 from evdev import UInput
 
 from .device_base import TourBoxBase
@@ -37,6 +39,66 @@ UNLOCK_COMMAND = bytes.fromhex("5500078894001afe")
 TOURBOX_NAME_PREFIX = "TourBox"
 
 
+async def disconnect_existing_device(timeout: float = 10.0):
+    """
+    Bleak cant detect already connected devices causing a poor user experience 
+    if a bluetooth manager automatically connects the device. 
+    Disconnect via dbus-fast (bleak dep) before the BLE connection attempt
+    """
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+
+    msg = Message(
+        destination="org.bluez",
+        path="/",
+        interface="org.freedesktop.DBus.ObjectManager",
+        member="GetManagedObjects",
+    )
+
+    try:
+        res = await asyncio.wait_for(bus.call(msg), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.warning("Timeout whileenumerating bluetooth devices")
+        return
+    except Exception:
+        logger.warning("Error while enumerating bluetooth devices")
+        return
+    
+    connection_path = None
+
+    for path, props in res.body[0].items():
+        if 'org.bluez.Device1' not in props:
+            continue
+
+        device_info = props['org.bluez.Device1']
+        if not device_info['Connected'].value or not device_info['Alias'].value.startswith(TOURBOX_NAME_PREFIX):
+            continue
+       
+        connection_path = path
+        break
+
+    if not connection_path:
+        return
+
+    logger.info(f"Found already connected device {connection_path}, disconnecting")
+
+    msg = Message(
+        destination="org.bluez",
+        path=connection_path,
+        interface="org.bluez.Device1",
+        member="Disconnect",
+        signature=""
+    )
+
+    try:
+        res = await asyncio.wait_for(bus.call(msg), timeout=timeout)
+        logger.info(f"Disconnected {connection_path}")
+    except asyncio.TimeoutError:
+        logger.warning("Unable to disconnect already connected device")
+    except Exception:
+        logger.warning("Error while disconnecting bluetooth device")
+        return
+
+
 async def scan_for_tourbox(timeout: float = 10.0) -> Optional[BLEDevice]:
     """Scan for TourBox devices by name prefix.
 
@@ -49,6 +111,9 @@ async def scan_for_tourbox(timeout: float = 10.0) -> Optional[BLEDevice]:
     Returns:
         BLEDevice if found, None otherwise
     """
+
+    await disconnect_existing_device(timeout)
+
     logger.info(f"Scanning for TourBox devices (timeout: {timeout}s)...")
     print(f"Scanning for TourBox devices...")
 
