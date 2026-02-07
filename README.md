@@ -40,7 +40,7 @@ Linux driver for the TourBox Lite, Neo, Elite and Elite Plus by TourBox Tech Inc
 
 ### System Requirements
 
-- Linux (Debian, Ubuntu, Fedora, Arch tested)
+- Linux (Debian, Ubuntu, Linux Mint, Fedora, Arch tested)
 - Python 3.9+
 - Bluetooth support (bluez) - for Bluetooth LE connection
 - User must be in `dialout` group - for USB connection

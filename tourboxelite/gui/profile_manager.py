@@ -35,7 +35,7 @@ from .driver_manager import DriverManager
 from .import_conflict_dialog import ImportConflictDialog
 
 # Import UI constants
-from tourboxelite.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER
+from tourboxelite.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER, safe_line_spacing
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ class ProfileManager(QWidget):
         self.profile_table.verticalHeader().setVisible(False)  # Hide row numbers
         # Set row height based on font metrics for proper scaling
         fm = self.profile_table.fontMetrics()
-        self.profile_table.verticalHeader().setDefaultSectionSize(int(fm.lineSpacing() * TABLE_ROW_HEIGHT_MULTIPLIER))
+        self.profile_table.verticalHeader().setDefaultSectionSize(int(safe_line_spacing(fm) * TABLE_ROW_HEIGHT_MULTIPLIER))
         self.profile_table.currentCellChanged.connect(self._on_profile_selection_changed)
         layout.addWidget(self.profile_table)
 

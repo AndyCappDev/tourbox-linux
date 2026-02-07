@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 from evdev import ecodes as e
 from tourboxelite.config_loader import VALID_MODIFIER_BUTTONS
-from tourboxelite.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER, TEXT_EDIT_HEIGHT_MULTIPLIER
+from tourboxelite.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER, TEXT_EDIT_HEIGHT_MULTIPLIER, safe_line_spacing
 from tourboxelite.haptic import HapticStrength, HapticSpeed
 
 logger = logging.getLogger(__name__)
@@ -169,7 +169,7 @@ class ComboConfigDialog(QDialog):
         self.control_combo.addItem("(select control)")
         # Set minimum height based on font metrics
         fm_control = self.control_combo.fontMetrics()
-        self.control_combo.setMinimumHeight(int(fm_control.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER))
+        self.control_combo.setMinimumHeight(int(safe_line_spacing(fm_control) * TEXT_EDIT_HEIGHT_MULTIPLIER))
 
         # Prepare exclusion set (modifier itself + already used controls)
         if exclude_controls is None:
@@ -195,7 +195,7 @@ class ComboConfigDialog(QDialog):
         self.action_type_combo.addItems(["Keyboard", "Mouse", "None"])
         # Set minimum height based on font metrics
         fm_action = self.action_type_combo.fontMetrics()
-        self.action_type_combo.setMinimumHeight(int(fm_action.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER))
+        self.action_type_combo.setMinimumHeight(int(safe_line_spacing(fm_action) * TEXT_EDIT_HEIGHT_MULTIPLIER))
         self.action_type_combo.currentTextChanged.connect(self._on_action_type_changed)
         action_type_layout.addWidget(self.action_type_combo)
         action_type_layout.addStretch()
@@ -207,7 +207,7 @@ class ComboConfigDialog(QDialog):
 
         # Calculate minimum height for buttons and input fields based on font metrics
         fm = self.keyboard_group.fontMetrics()
-        button_height = int(fm.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER)
+        button_height = int(safe_line_spacing(fm) * TEXT_EDIT_HEIGHT_MULTIPLIER)
 
         # Modifier buttons
         self.ctrl_btn = QPushButton("Ctrl")
@@ -275,7 +275,7 @@ class ComboConfigDialog(QDialog):
 
         # Calculate minimum height for combo box based on font metrics
         fm_mouse = self.mouse_group.fontMetrics()
-        combo_height = int(fm_mouse.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER)
+        combo_height = int(safe_line_spacing(fm_mouse) * TEXT_EDIT_HEIGHT_MULTIPLIER)
 
         mouse_dir_layout = QHBoxLayout()
         mouse_dir_layout.addWidget(QLabel("Action:"))
@@ -304,7 +304,7 @@ class ComboConfigDialog(QDialog):
         self.comment_text.setPlaceholderText("Add notes about this combination...")
         # Set height to approximately 1 line based on font metrics
         fm = self.comment_text.fontMetrics()
-        self.comment_text.setMaximumHeight(int(fm.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER))
+        self.comment_text.setMaximumHeight(int(safe_line_spacing(fm) * TEXT_EDIT_HEIGHT_MULTIPLIER))
         self.comment_text.setPlainText(comment)
         layout.addWidget(self.comment_text)
 
@@ -322,7 +322,7 @@ class ComboConfigDialog(QDialog):
         self.haptic_combo.addItem("Strong", HapticStrength.STRONG)
         # Set minimum height based on font metrics
         fm_haptic = self.haptic_combo.fontMetrics()
-        self.haptic_combo.setMinimumHeight(int(fm_haptic.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER))
+        self.haptic_combo.setMinimumHeight(int(safe_line_spacing(fm_haptic) * TEXT_EDIT_HEIGHT_MULTIPLIER))
         # Set initial value
         if haptic_strength is not None:
             index = self.haptic_combo.findData(haptic_strength)
@@ -340,7 +340,7 @@ class ComboConfigDialog(QDialog):
         self.haptic_speed_combo.addItem("Fast (more detents)", HapticSpeed.FAST)
         self.haptic_speed_combo.addItem("Medium", HapticSpeed.MEDIUM)
         self.haptic_speed_combo.addItem("Slow (fewer detents)", HapticSpeed.SLOW)
-        self.haptic_speed_combo.setMinimumHeight(int(fm_haptic.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER))
+        self.haptic_speed_combo.setMinimumHeight(int(safe_line_spacing(fm_haptic) * TEXT_EDIT_HEIGHT_MULTIPLIER))
         # Set initial value
         if haptic_speed is not None:
             speed_index = self.haptic_speed_combo.findData(haptic_speed)
@@ -580,7 +580,7 @@ class DoublePressDialog(QDialog):
         self.action_type_combo = QComboBox()
         self.action_type_combo.addItems(["Keyboard", "Mouse"])
         fm = self.action_type_combo.fontMetrics()
-        self.action_type_combo.setMinimumHeight(int(fm.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER))
+        self.action_type_combo.setMinimumHeight(int(safe_line_spacing(fm) * TEXT_EDIT_HEIGHT_MULTIPLIER))
         self.action_type_combo.currentTextChanged.connect(self._on_action_type_changed)
         action_type_layout.addWidget(self.action_type_combo)
         action_type_layout.addStretch()
@@ -590,7 +590,7 @@ class DoublePressDialog(QDialog):
         self.keyboard_group = QGroupBox("Keyboard Action")
         keyboard_layout = QVBoxLayout(self.keyboard_group)
 
-        button_height = int(fm.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER)
+        button_height = int(safe_line_spacing(fm) * TEXT_EDIT_HEIGHT_MULTIPLIER)
 
         # Modifiers
         mod_layout = QHBoxLayout()
@@ -852,7 +852,7 @@ class ControlEditor(QWidget):
         self.action_type_combo.addItems(["Keyboard", "Mouse", "None"])
         # Set minimum height based on font metrics
         fm_action = self.action_type_combo.fontMetrics()
-        self.action_type_combo.setMinimumHeight(int(fm_action.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER))
+        self.action_type_combo.setMinimumHeight(int(safe_line_spacing(fm_action) * TEXT_EDIT_HEIGHT_MULTIPLIER))
         self.action_type_combo.currentTextChanged.connect(self._on_action_type_changed)
         action_type_layout.addWidget(self.action_type_combo)
         action_type_layout.addStretch()
@@ -864,7 +864,7 @@ class ControlEditor(QWidget):
 
         # Calculate minimum height for buttons and input fields based on font metrics
         fm = self.keyboard_group.fontMetrics()
-        button_height = int(fm.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER)
+        button_height = int(safe_line_spacing(fm) * TEXT_EDIT_HEIGHT_MULTIPLIER)
 
         # Modifier buttons
         self.ctrl_btn = QPushButton("Ctrl")
@@ -932,7 +932,7 @@ class ControlEditor(QWidget):
 
         # Calculate minimum height for buttons and combo box based on font metrics
         fm_mouse = self.mouse_group.fontMetrics()
-        mouse_button_height = int(fm_mouse.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER)
+        mouse_button_height = int(safe_line_spacing(fm_mouse) * TEXT_EDIT_HEIGHT_MULTIPLIER)
 
         mouse_dir_layout = QHBoxLayout()
 
@@ -998,7 +998,7 @@ class ControlEditor(QWidget):
         self.haptic_combo.addItem("Strong", HapticStrength.STRONG)
         # Set minimum height based on font metrics
         fm_haptic = self.haptic_combo.fontMetrics()
-        self.haptic_combo.setMinimumHeight(int(fm_haptic.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER))
+        self.haptic_combo.setMinimumHeight(int(safe_line_spacing(fm_haptic) * TEXT_EDIT_HEIGHT_MULTIPLIER))
         haptic_row.addWidget(self.haptic_combo)
 
         # Speed dropdown (to the right of strength)
@@ -1009,7 +1009,7 @@ class ControlEditor(QWidget):
         self.haptic_speed_combo.addItem("Fast (more detents)", HapticSpeed.FAST)
         self.haptic_speed_combo.addItem("Medium", HapticSpeed.MEDIUM)
         self.haptic_speed_combo.addItem("Slow (fewer detents)", HapticSpeed.SLOW)
-        self.haptic_speed_combo.setMinimumHeight(int(fm_haptic.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER))
+        self.haptic_speed_combo.setMinimumHeight(int(safe_line_spacing(fm_haptic) * TEXT_EDIT_HEIGHT_MULTIPLIER))
         haptic_row.addWidget(self.haptic_speed_combo)
 
         haptic_row.addStretch()
@@ -1033,7 +1033,7 @@ class ControlEditor(QWidget):
         self.comment_text.setPlaceholderText("Add notes or comments about this mapping...")
         # Set height to approximately 1 line based on font metrics
         fm = self.comment_text.fontMetrics()
-        text_height = int(fm.lineSpacing() * TEXT_EDIT_HEIGHT_MULTIPLIER)
+        text_height = int(safe_line_spacing(fm) * TEXT_EDIT_HEIGHT_MULTIPLIER)
         self.comment_text.setMinimumHeight(text_height)
         self.comment_text.setMaximumHeight(text_height)
         comment_layout.addWidget(self.comment_text)
@@ -1110,7 +1110,7 @@ class ControlEditor(QWidget):
 
         # Set row height and table max height based on font metrics for proper scaling
         fm = self.combos_table.fontMetrics()
-        row_height = int(fm.lineSpacing() * TABLE_ROW_HEIGHT_MULTIPLIER)
+        row_height = int(safe_line_spacing(fm) * TABLE_ROW_HEIGHT_MULTIPLIER)
         self.combos_table.verticalHeader().setDefaultSectionSize(row_height)
 
         # Set max height to fit ~6 rows plus header (allows table to scale but caps it)
@@ -1118,7 +1118,7 @@ class ControlEditor(QWidget):
 
         # Header height might be 0 at init, use reasonable default based on font metrics
         if header_height < 20:
-            header_height = int(fm.lineSpacing() * 1.5)  # Base on font size
+            header_height = int(safe_line_spacing(fm) * 1.5)  # Base on font size
 
         # Calculate min/max height: min 3 rows, max 5 rows + header + frame/borders
         min_table_height = row_height * 3 + header_height + 4

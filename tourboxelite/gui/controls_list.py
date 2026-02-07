@@ -17,7 +17,7 @@ from evdev import ecodes as e
 # Import from existing driver code
 from tourboxelite.config_loader import Profile, BUTTON_CODES
 
-from tourboxelite.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER
+from tourboxelite.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER, safe_line_spacing
 
 logger = logging.getLogger(__name__)
 
@@ -89,14 +89,14 @@ class ControlsList(QWidget):
         self.table.verticalHeader().setVisible(False)  # Hide row numbers
         # Set row height based on font metrics for proper scaling
         fm = self.table.fontMetrics()
-        row_height = int(fm.lineSpacing() * TABLE_ROW_HEIGHT_MULTIPLIER)
+        row_height = int(safe_line_spacing(fm) * TABLE_ROW_HEIGHT_MULTIPLIER)
         self.table.verticalHeader().setDefaultSectionSize(row_height)
         self.table.itemSelectionChanged.connect(self._on_selection_changed)
 
         # Set minimum height to match Modifier Combinations table (5 rows + header)
         header_height = self.table.horizontalHeader().height()
         if header_height < 20:
-            header_height = int(fm.lineSpacing() * 1.5)
+            header_height = int(safe_line_spacing(fm) * 1.5)
         min_table_height = row_height * 5 + header_height + 4
         self.table.setMinimumHeight(min_table_height)
 
