@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QLabel, QSplitter, QMessageBox, QDialog, QProgressDialog, QToolBar
 )
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QKeySequence, QIcon, QDesktopServices
+from PySide6.QtGui import QAction, QKeySequence, QIcon, QDesktopServices, QFontMetrics
 
 # Import from GUI modules
 from .profile_manager import ProfileManager
@@ -1640,6 +1640,15 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("TourBox Configuration")
     app.setDesktopFileName("tourbox-gui.desktop")
+
+    # Fix bogus font metrics on some systems (e.g., Linux Mint/Cinnamon)
+    # where lineSpacing() returns wildly incorrect values (500+ pixels)
+    fm = QFontMetrics(app.font())
+    if fm.lineSpacing() > 40:
+        logger.warning(f"Bogus font metrics detected (lineSpacing={fm.lineSpacing()}), overriding application font")
+        font = app.font()
+        font.setPixelSize(14)
+        app.setFont(font)
 
     # Create and show main window
     window = TourBoxConfigWindow()
