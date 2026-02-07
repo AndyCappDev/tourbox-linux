@@ -86,6 +86,7 @@ class TourBoxBase(ABC):
         self.pidfile = pidfile or os.getenv('pidfile') or default_pidfile
         self.config_path = config_path
         self.controller: Optional[UInput] = None
+        self.device_name = "TourBox"
         self.killer = GracefulKiller()
         self.button_count = 0
         self.mapping: Optional[Dict] = None
@@ -853,7 +854,7 @@ class TourBoxBase(ABC):
             # Create new controller with updated capabilities
             self.controller = UInput(
                 self.capabilities,
-                name='TourBox Elite',
+                name=self.device_name,
                 vendor=0xC251,
                 product=0x2005
             )
@@ -942,7 +943,7 @@ class TourBoxBase(ABC):
                 # Create new controller with updated capabilities
                 self.controller = UInput(
                     self.capabilities,
-                    name='TourBox Elite',
+                    name=self.device_name,
                     vendor=0xC251,
                     product=0x2005
                 )
@@ -1009,7 +1010,7 @@ class TourBoxBase(ABC):
         logger.info("Creating virtual input device...")
         self.controller = UInput(
             self.capabilities,
-            name='TourBox Elite',
+            name=self.device_name,
             vendor=0xC251,
             product=0x2005
         )

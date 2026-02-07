@@ -258,7 +258,8 @@ class TourBoxBLE(TourBoxBase):
                 logger.error("No TourBox device found")
                 return True  # Retry (will scan again)
 
-            logger.info(f"Connecting to {self.device.name} at {self.device.address}...")
+            self.device_name = self.device.name or "TourBox"
+            logger.info(f"Connecting to {self.device_name} at {self.device.address}...")
             self.disconnected = False
 
             async with BleakClient(
