@@ -91,6 +91,7 @@ class ControlsList(QWidget):
         fm = self.table.fontMetrics()
         row_height = int(safe_line_spacing(fm) * TABLE_ROW_HEIGHT_MULTIPLIER)
         self.table.verticalHeader().setDefaultSectionSize(row_height)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
         self.table.itemSelectionChanged.connect(self._on_selection_changed)
 
         # Set minimum height to match Modifier Combinations table (5 rows + header)

@@ -77,6 +77,7 @@ class ProfileManager(QWidget):
         # Set row height based on font metrics for proper scaling
         fm = self.profile_table.fontMetrics()
         self.profile_table.verticalHeader().setDefaultSectionSize(int(safe_line_spacing(fm) * TABLE_ROW_HEIGHT_MULTIPLIER))
+        self.profile_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
         self.profile_table.currentCellChanged.connect(self._on_profile_selection_changed)
         layout.addWidget(self.profile_table)
 

@@ -1112,6 +1112,7 @@ class ControlEditor(QWidget):
         fm = self.combos_table.fontMetrics()
         row_height = int(safe_line_spacing(fm) * TABLE_ROW_HEIGHT_MULTIPLIER)
         self.combos_table.verticalHeader().setDefaultSectionSize(row_height)
+        self.combos_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
 
         # Set max height to fit ~6 rows plus header (allows table to scale but caps it)
         header_height = self.combos_table.horizontalHeader().height()
