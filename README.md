@@ -34,6 +34,8 @@ Linux driver for the TourBox Lite, Neo, Elite and Elite Plus by TourBox Tech Inc
 - ✅ **Systemd Integration** - Runs as a user service, starts on login
 - ✅ **Non-Systemd Support** - Works with OpenRC, runit, s6, and other init systems
 
+![TourBox Elite Configuration GUI](docs/images/gui-screenshot.png?v=2.10.0)
+
 ## Requirements
 
 ### System Requirements
@@ -155,6 +157,15 @@ Verify installation:
 xdotool --version
 ```
 
+> **Linux Mint users:** The version of `xdotool` in the Mint repositories may be too old (v3.20160805.1 doesn't support the commands this driver needs). If profile switching doesn't work, you may need to build xdotool from source:
+> ```bash
+> sudo apt install libxtst-dev libxinerama-dev libxkbcommon-x11-dev
+> git clone https://github.com/jordansissel/xdotool.git
+> cd xdotool
+> make
+> sudo make install
+> ```
+
 ## Updating
 
 To update to the latest version:
@@ -176,8 +187,6 @@ The installer will automatically:
 ## Configuration GUI
 
 The driver includes a **graphical configuration tool** that makes it easy to configure button mappings without editing config files manually.
-
-![TourBox Elite Configuration GUI](docs/images/gui-screenshot.png?v=2.10.0)
 
 ### Running the GUI
 
