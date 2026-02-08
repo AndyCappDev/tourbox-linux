@@ -97,4 +97,4 @@ When bumping the version, update these files:
 - `tuxbox/__init__.py` - VERSION constant
 - `tuxbox/gui/__init__.py` - __version__ constant
 - `README.md` - Version badge at top, image cache-bust parameter
-- `docs/GUI_USER_GUIDE.md` - Image cache-bust parameter
+- `docs/GUI_USER_GUIDE.md` - Version number (line 3) and "Last Updated" date (line 4), image cache-bust parameter
