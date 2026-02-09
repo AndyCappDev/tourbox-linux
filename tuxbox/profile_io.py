@@ -61,16 +61,21 @@ def _migrate_config_dir_if_needed():
 
     if old_gui_profile.exists():
         try:
-            # Read and update content
-            content = old_gui_profile.read_text()
-            content = content.replace('name = TourBox GUI', 'name = TuxBox GUI')
-            content = content.replace('window_class = tourbox-gui', 'window_class = tuxbox-gui')
-            content = content.replace('app_id = tourbox-gui', 'app_id = tuxbox-gui')
+            if new_gui_profile.exists():
+                # New profile already exists, just remove the old one
+                old_gui_profile.unlink()
+                logger.info(f"Removed stale GUI profile: {old_gui_profile.name}")
+            else:
+                # Read and update content
+                content = old_gui_profile.read_text()
+                content = content.replace('name = TourBox GUI', 'name = TuxBox GUI')
+                content = content.replace('window_class = tourbox-gui', 'window_class = tuxbox-gui')
+                content = content.replace('app_id = tourbox-gui', 'app_id = tuxbox-gui')
 
-            # Write to new filename
-            new_gui_profile.write_text(content)
-            old_gui_profile.unlink()
-            logger.info(f"Migrated GUI profile: {old_gui_profile.name} -> {new_gui_profile.name}")
+                # Write to new filename and remove old
+                new_gui_profile.write_text(content)
+                old_gui_profile.unlink()
+                logger.info(f"Migrated GUI profile: {old_gui_profile.name} -> {new_gui_profile.name}")
         except Exception as ex:
             logger.error(f"Failed to migrate GUI profile: {ex}")
 
@@ -1129,6 +1134,15 @@ def ensure_tuxbox_gui_profile() -> Tuple[bool, str]:
 
     profiles_dir = get_profiles_dir()
     gui_profile_path = profiles_dir / 'tuxbox_gui.profile'
+
+    # Clean up stale old-name GUI profile if it exists
+    old_gui_profile = profiles_dir / 'tourbox_gui.profile'
+    if old_gui_profile.exists():
+        try:
+            old_gui_profile.unlink()
+            logger.info(f"Removed stale GUI profile: {old_gui_profile.name}")
+        except Exception as ex:
+            logger.warning(f"Could not remove stale GUI profile: {ex}")
 
     # Already exists
     if gui_profile_path.exists():

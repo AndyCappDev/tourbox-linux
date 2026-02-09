@@ -127,7 +127,7 @@ class ProfileManager(QWidget):
 
         # Filter out the TuxBox GUI meta-configuration profile
         # (it's for internal use and shouldn't be edited by users)
-        displayed_profiles = [p for p in profiles if p.name != 'TuxBox GUI']
+        displayed_profiles = [p for p in profiles if p.name not in ('TuxBox GUI', 'TourBox GUI')]
 
         for row, profile in enumerate(displayed_profiles):
             self.profile_table.insertRow(row)
@@ -207,7 +207,7 @@ class ProfileManager(QWidget):
         # Clear and rebuild table
         self.profile_table.setRowCount(0)
         # Filter out the TuxBox GUI meta-configuration profile
-        displayed_profiles = [p for p in self.profiles if p.name != 'TuxBox GUI']
+        displayed_profiles = [p for p in self.profiles if p.name not in ('TuxBox GUI', 'TourBox GUI')]
         for row, profile in enumerate(displayed_profiles):
             self.profile_table.insertRow(row)
 
