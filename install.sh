@@ -49,7 +49,17 @@ else
 fi
 
 # Determine package manager and package names
-if command -v apt &> /dev/null; then
+# Check for immutable (rpm-ostree) distros first (Bazzite, Silverblue, Kinoite, etc.)
+if [ -f /run/ostree-booted ] && command -v rpm-ostree &> /dev/null; then
+    PKG_MANAGER="rpm-ostree"
+    PKG_INSTALL="rpm-ostree install"
+    PKG_BLUEZ="bluez"
+    PKG_PIP="python3-pip"
+    PKG_GCC="gcc"
+    PKG_PYTHON_DEV="python3-devel"
+    PKG_KERNEL_HEADERS="kernel-headers"
+    IMMUTABLE_DISTRO=true
+elif command -v apt &> /dev/null; then
     PKG_MANAGER="apt"
     PKG_INSTALL="sudo apt install"
     PKG_BLUEZ="bluez"
@@ -120,7 +130,9 @@ if ! command -v gcc &> /dev/null; then
 fi
 
 # Check for Python development headers (needed to compile Python packages)
-if ! python3 -c "import sysconfig; import os; exit(0 if os.path.exists(sysconfig.get_path('include')) else 1)" &> /dev/null; then
+# Check for the actual Python.h file, not just the include directory
+PYTHON_INCLUDE=$(python3 -c "import sysconfig; print(sysconfig.get_path('include'))" 2>/dev/null)
+if [ -z "$PYTHON_INCLUDE" ] || [ ! -f "$PYTHON_INCLUDE/Python.h" ]; then
     MISSING_DEPS+=("python-dev")
     MISSING_PKG_NAMES+=("$PKG_PYTHON_DEV")
 fi
@@ -138,6 +150,11 @@ if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
     echo ""
     echo "Install them with:"
     echo "  $PKG_INSTALL ${MISSING_PKG_NAMES[*]}"
+    if [ "$IMMUTABLE_DISTRO" = "true" ]; then
+        echo ""
+        echo -e "${YELLOW}Note: You are on an immutable distro ($DISTRO_NAME).${NC}"
+        echo "After installing, you must reboot for the changes to take effect."
+    fi
     echo ""
     echo "Then run this installer again:"
     echo "  ./install.sh"
