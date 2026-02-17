@@ -1,6 +1,6 @@
 # TuxBox — Linux Driver for TourBox Controllers
 
-**Version 3.0.0**
+**Version 3.0.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Linux](https://img.shields.io/badge/platform-linux-lightgrey.svg)](https://www.linux.org/)
@@ -45,7 +45,7 @@ Linux driver for the TourBox Lite, Neo, Elite and Elite Plus by TourBox Tech Inc
 - Bluetooth support (bluez) - for Bluetooth LE connection
 - User must be in `dialout` group - for USB connection
 - Build tools for compiling Python packages:
-  - **Debian/Ubuntu:** `gcc python3-dev linux-headers-generic`
+  - **Debian/Ubuntu:** `gcc python3-dev linux-headers-generic libxcb-cursor0`
   - **Fedora/RHEL:** `gcc python3-devel kernel-headers`
   - **Arch:** `gcc python linux-headers`
 - Running on Wayland or X11 (for app-specific profiles, X11 requires `xdotool`)
@@ -215,7 +215,7 @@ If you prefer manual setup, first ensure you have the build dependencies install
 
 ```bash
 # Debian/Ubuntu
-sudo apt install gcc python3-dev linux-headers-generic bluez python3-pip
+sudo apt install gcc python3-dev linux-headers-generic libxcb-cursor0 bluez python3-pip
 
 # Fedora/RHEL
 sudo dnf install gcc python3-devel kernel-headers bluez python3-pip

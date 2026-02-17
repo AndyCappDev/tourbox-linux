@@ -92,11 +92,11 @@ class TuxBoxConfigWindow(QMainWindow):
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
 
-        # Top right: Controls list (can shrink when control editor needs more space)
+        # Top right: Controls list (expands to fill available space)
         self.controls_list = ControlsList()
         self.controls_list.setMinimumWidth(400)  # Minimum width only, height set in ControlsList
         self.controls_list.control_selected.connect(self._on_control_selected)
-        right_layout.addWidget(self.controls_list, stretch=0)  # No stretch - let control editor expand
+        right_layout.addWidget(self.controls_list, stretch=1)  # Stretch - table benefits from extra space
 
         # Bottom right: Control editor
         self.control_editor = ControlEditor()
@@ -110,7 +110,7 @@ class TuxBoxConfigWindow(QMainWindow):
         self.control_editor.double_press_action_changed.connect(self._on_double_press_action_changed)
         self.control_editor.double_press_comment_changed.connect(self._on_double_press_comment_changed)
         self.control_editor.on_release_changed.connect(self._on_on_release_changed)
-        right_layout.addWidget(self.control_editor, stretch=1)
+        right_layout.addWidget(self.control_editor, stretch=0)
 
         main_splitter.addWidget(right_widget)
 

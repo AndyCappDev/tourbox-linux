@@ -1136,8 +1136,8 @@ class ControlEditor(QWidget):
         combos_btn_layout.addStretch()
         layout.addLayout(combos_btn_layout)
 
-        # Push Apply button to bottom to align with Profiles pane buttons
-        layout.addStretch()
+        # Small spacing before Apply button
+        layout.addSpacing(8)
 
         # Apply button
         button_layout = QHBoxLayout()

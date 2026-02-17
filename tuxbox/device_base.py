@@ -858,7 +858,8 @@ class TuxBoxBase(ABC):
                 vendor=0xC251,
                 product=0x2005
             )
-            logger.debug(f"Virtual input device recreated: {self.controller.device.path}")
+            dev_path = self.controller.device.path if self.controller.device else "unknown"
+            logger.debug(f"Virtual input device recreated: {dev_path}")
 
     def reload_config_mappings(self):
         """Reload configuration from file and update mappings
@@ -947,7 +948,8 @@ class TuxBoxBase(ABC):
                     vendor=0xC251,
                     product=0x2005
                 )
-                logger.debug(f"Virtual input device recreated: {self.controller.device.path}")
+                dev_path = self.controller.device.path if self.controller.device else "unknown"
+                logger.debug(f"Virtual input device recreated: {dev_path}")
 
             print(f"Configuration reloaded successfully - using profile: {self.current_profile.name}")
             if self.modifier_buttons:

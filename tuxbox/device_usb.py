@@ -208,7 +208,8 @@ class TuxBoxUSB(TuxBoxBase):
 
             logger.info("TourBox Elite USB ready!")
             print("TourBox Elite connected via USB!")
-            print(f"Virtual input device: {self.controller.device.path}")
+            dev_path = self.controller.device.path if self.controller.device else "unknown"
+            print(f"Virtual input device: {dev_path}")
 
             if self.use_profiles:
                 print(f"Profile switching enabled - Current profile: {self.current_profile.name}")
