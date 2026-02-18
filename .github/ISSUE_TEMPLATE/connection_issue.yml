@@ -1,0 +1,96 @@
+name: Connection Issue
+description: Report a problem connecting to your TourBox device
+labels: ["connection"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the connection problem you're experiencing.
+      placeholder: "e.g. Device not detected, connection drops after a few minutes, etc."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: device
+    attributes:
+      label: TourBox Model
+      options:
+        - Elite
+        - Elite Plus
+        - Neo
+        - Lite
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection Type
+      options:
+        - USB
+        - Bluetooth LE
+    validations:
+      required: true
+
+  - type: input
+    id: distro
+    attributes:
+      label: Linux Distribution
+      placeholder: "e.g. Ubuntu 24.04, Fedora 41, Bazzite 41"
+    validations:
+      required: true
+
+  - type: textarea
+    id: groups
+    attributes:
+      label: User Groups
+      description: |
+        Paste the output of: `groups`
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: usb-info
+    attributes:
+      label: USB Device Info (USB only)
+      description: |
+        Paste the output of: `ls -l /dev/ttyACM*`
+        and: `lsusb | grep -i tour`
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: ble-info
+    attributes:
+      label: Bluetooth Info (BLE only)
+      description: |
+        Paste the output of: `bluetoothctl devices`
+        and: `systemctl status bluetooth`
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Driver Logs
+      description: |
+        Run the driver in verbose mode and paste the output:
+        `./venv/bin/python -m tuxbox -v`
+        or check the journal: `journalctl --user -u tuxbox --no-pager -n 50`
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: udev
+    attributes:
+      label: Udev Rules
+      description: |
+        Paste the output of: `cat /etc/udev/rules.d/*tuxbox*`
+      render: shell
+    validations:
+      required: false

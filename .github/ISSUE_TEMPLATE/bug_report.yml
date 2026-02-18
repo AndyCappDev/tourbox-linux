@@ -1,0 +1,108 @@
+name: Bug Report
+description: Report a bug with TuxBox
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of the bug.
+      placeholder: What happened? What did you expect to happen?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: device
+    attributes:
+      label: TourBox Model
+      options:
+        - Elite
+        - Elite Plus
+        - Neo
+        - Lite
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection Type
+      options:
+        - USB
+        - Bluetooth LE
+        - Both / Not applicable
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      options:
+        - Driver
+        - GUI
+        - Installation
+        - Service management
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: distro
+    attributes:
+      label: Linux Distribution
+      placeholder: "e.g. Ubuntu 24.04, Fedora 41, Bazzite 41"
+    validations:
+      required: true
+
+  - type: input
+    id: desktop
+    attributes:
+      label: Desktop Environment / Compositor
+      placeholder: "e.g. GNOME 47 (Wayland), KDE Plasma 6, Sway 1.9"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: init-system
+    attributes:
+      label: Init System
+      options:
+        - systemd
+        - OpenRC
+        - runit
+        - s6
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      placeholder: "Output of: python3 --version"
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this bug?
+      placeholder: |
+        1. Start the driver with ...
+        2. Open the GUI ...
+        3. Click on ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: |
+        Paste any relevant log output. For driver issues, run with `-v` flag or check journal:
+        `journalctl --user -u tuxbox --no-pager -n 50`
+      render: shell
+    validations:
+      required: false
