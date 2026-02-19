@@ -19,6 +19,7 @@ import logging
 import glob
 import time
 
+from . import VERSION
 from .config_loader import load_device_config
 
 logger = logging.getLogger(__name__)
@@ -136,6 +137,8 @@ def main():
         description='TuxBox Driver (auto-detects USB or BLE)',
         epilog='By default, scans for USB first, then falls back to Bluetooth.'
     )
+    parser.add_argument('--version', action='version',
+                        version=f'TuxBox {VERSION}')
     parser.add_argument('--usb', action='store_true',
                         help='Force USB mode')
     parser.add_argument('--ble', action='store_true',
