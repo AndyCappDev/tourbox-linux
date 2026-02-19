@@ -82,6 +82,17 @@ class DriverManager:
         DriverManager._systemctl_available = shutil.which('systemctl') is not None
         return DriverManager._systemctl_available
 
+    # Patterns to match driver processes via pgrep -f (full command line match).
+    # Multiple patterns cover different invocation methods:
+    #   - "python -m tuxbox [args]"         (standard / systemd service)
+    #   - "/path/to/tuxbox [args]"          (pip entry point)
+    #   - "/path/to/.tuxbox-wrapped [args]" (NixOS wrapper)
+    # The patterns intentionally exclude GUI processes (tuxbox-gui, tuxbox.gui).
+    DRIVER_PGREP_PATTERNS = [
+        r'python.*-m\s+tuxbox(\s|$)',
+        r'[/.]tuxbox(-wrapped)?(\s|$)',
+    ]
+
     @staticmethod
     def _get_driver_pids() -> list:
         """Get PIDs of running driver processes
@@ -89,27 +100,28 @@ class DriverManager:
         Returns:
             List of PID strings for running tuxbox processes
         """
-        try:
-            # Use pgrep to find Python processes running tuxbox
-            # -f matches against full command line
-            result = subprocess.run(
-                ['pgrep', '-f', f'python.*-m.*{DriverManager.DRIVER_MODULE}'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+        all_pids = set()
+        our_pid = str(os.getpid())
+        parent_pid = str(os.getppid())
 
-            if result.returncode == 0 and result.stdout.strip():
-                pids = result.stdout.strip().split('\n')
-                # Filter out our own process (the GUI)
-                our_pid = str(os.getpid())
-                parent_pid = str(os.getppid())
-                return [pid for pid in pids if pid and pid != our_pid and pid != parent_pid]
-            return []
+        for pattern in DriverManager.DRIVER_PGREP_PATTERNS:
+            try:
+                result = subprocess.run(
+                    ['pgrep', '-f', pattern],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
 
-        except Exception as e:
-            logger.debug(f"pgrep failed: {e}")
-            return []
+                if result.returncode == 0 and result.stdout.strip():
+                    for pid in result.stdout.strip().split('\n'):
+                        if pid and pid != our_pid and pid != parent_pid:
+                            all_pids.add(pid)
+
+            except Exception as e:
+                logger.debug(f"pgrep failed for pattern '{pattern}': {e}")
+
+        return list(all_pids)
 
     @staticmethod
     def stop_driver() -> Tuple[bool, str]:
