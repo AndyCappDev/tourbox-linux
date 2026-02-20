@@ -259,6 +259,7 @@ nano ~/.config/systemd/user/tuxbox.service
 # [Unit]
 # Description=TuxBox Driver
 # After=graphical-session.target
+# PartOf=graphical-session.target
 #
 # [Service]
 # Type=simple
@@ -267,7 +268,7 @@ nano ~/.config/systemd/user/tuxbox.service
 # RestartSec=5
 #
 # [Install]
-# WantedBy=default.target
+# WantedBy=graphical-session.target
 
 # 8. Enable and start service
 systemctl --user daemon-reload
