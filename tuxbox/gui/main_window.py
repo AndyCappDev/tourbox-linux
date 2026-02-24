@@ -32,7 +32,7 @@ class TuxBoxConfigWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("TuxBox Configuration")
-        self.setMinimumSize(1000, 940)  # Increased to ensure all controls including buttons are fully visible
+        self.setMinimumSize(1000, 980)  # Ensure all controls including profile buttons are fully visible
         self.resize(1280, 1024)
 
         # Set window icon
@@ -75,8 +75,9 @@ class TuxBoxConfigWindow(QMainWindow):
 
         # Top left: Controller image
         self.controller_view = ControllerView()
-        self.controller_view.setMinimumSize(400, 225)
-        left_layout.addWidget(self.controller_view, stretch=1)
+        self.controller_view.setMinimumSize(400, 410)
+        self.controller_view.setFixedHeight(410)
+        left_layout.addWidget(self.controller_view, stretch=0)
 
         # Bottom left: Profiles manager
         self.profile_manager = ProfileManager()
@@ -84,7 +85,7 @@ class TuxBoxConfigWindow(QMainWindow):
         self.profile_manager.profile_selected.connect(self._on_profile_selected)
         self.profile_manager.profiles_changed.connect(self._on_profiles_changed)
         self.profile_manager.profiles_reset.connect(self._on_profiles_reset)
-        left_layout.addWidget(self.profile_manager, stretch=0)
+        left_layout.addWidget(self.profile_manager, stretch=1)
 
         main_splitter.addWidget(left_widget)
 
