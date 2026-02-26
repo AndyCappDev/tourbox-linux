@@ -19,7 +19,11 @@ import logging
 import glob
 import time
 
-from . import VERSION
+try:
+    from . import VERSION
+except ImportError:
+    # Fallback for broken editable installs (e.g. Python 3.14 + legacy setuptools)
+    VERSION = "unknown"
 from .config_loader import load_device_config
 
 logger = logging.getLogger(__name__)

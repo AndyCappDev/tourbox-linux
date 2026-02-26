@@ -10,7 +10,10 @@ import urllib.error
 
 from PySide6.QtCore import QThread, Signal
 
-from tuxbox import VERSION
+try:
+    from tuxbox import VERSION
+except ImportError:
+    VERSION = "unknown"
 
 logger = logging.getLogger(__name__)
 
