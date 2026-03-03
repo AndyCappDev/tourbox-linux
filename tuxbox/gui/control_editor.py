@@ -17,6 +17,7 @@ from PySide6.QtGui import QKeyEvent
 from evdev import ecodes as e
 from tuxbox.config_loader import VALID_MODIFIER_BUTTONS
 from tuxbox.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER, TEXT_EDIT_HEIGHT_MULTIPLIER
+from tuxbox.gui.keymap_util import get_system_display_hints
 from tuxbox.haptic import HapticStrength, HapticSpeed
 
 logger = logging.getLogger(__name__)
@@ -171,6 +172,7 @@ class KeyCaptureLineEdit(QLineEdit):
         super().__init__(parent)
         self.setPlaceholderText("Press a key")
         self._evdev_keycode = None
+        self._display_char = None  # Locale-aware character from key event
 
     def keyPressEvent(self, event: QKeyEvent):
         # Ignore auto-repeat
@@ -198,8 +200,10 @@ class KeyCaptureLineEdit(QLineEdit):
         # Display: use the typed character for printable keys, otherwise a readable name
         char = event.text()
         if char and char.isprintable():
+            self._display_char = char
             self.setText(char)
         else:
+            self._display_char = None
             # Strip KEY_ prefix and make readable (e.g. KEY_SPACE -> Space)
             display = key_name[4:] if key_name.startswith('KEY_') else key_name
             self.setText(display.capitalize())
@@ -213,17 +217,23 @@ class KeyCaptureLineEdit(QLineEdit):
             return _EVDEV_CODE_TO_NAME.get(self._evdev_keycode)
         return None
 
-    def set_from_key_name(self, key_name: str):
+    def set_from_key_name(self, key_name: str, display_hints: dict = None):
         """Set state from a KEY_* string (for loading existing configs).
 
         Args:
             key_name: e.g. 'KEY_EQUAL', 'KEY_A', 'KEY_SPACE'
+            display_hints: Optional dict of KEY_* name -> display character (locale-aware)
         """
         # Find evdev code for this name
         for code, name in _EVDEV_CODE_TO_NAME.items():
             if name == key_name:
                 self._evdev_keycode = code
-                # Display: use KEYCODE_TO_CHAR if available, otherwise derive from name
+                # Check display hints first (locale-aware character)
+                if display_hints and key_name in display_hints:
+                    self._display_char = display_hints[key_name]
+                    self.setText(display_hints[key_name])
+                    return
+                # Fallback: use KEYCODE_TO_CHAR if available, otherwise derive from name
                 short = key_name[4:] if key_name.startswith('KEY_') else key_name
                 if short in KEYCODE_TO_CHAR:
                     self.setText(KEYCODE_TO_CHAR[short])
@@ -231,13 +241,20 @@ class KeyCaptureLineEdit(QLineEdit):
                     self.setText(short.lower())
                 else:
                     self.setText(short.capitalize())
+                self._display_char = None
                 return
         # Unknown key name — just display it raw
         self.setText(key_name)
+        self._display_char = None
+
+    def get_display_char(self) -> str:
+        """Return the locale-aware display character, or None if not available."""
+        return self._display_char
 
     def clear(self):
         """Reset captured keycode and display text."""
         self._evdev_keycode = None
+        self._display_char = None
         super().clear()
 
 
@@ -1500,7 +1517,7 @@ class ControlEditor(QWidget):
                 is_single = (short.upper() in KEYCODE_TO_CHAR or len(short) == 1)
 
                 if is_single:
-                    self.key_input.set_from_key_name(full_key.upper())
+                    self.key_input.set_from_key_name(full_key.upper(), get_system_display_hints())
                 else:
                     # It's a special key name - try to match in special keys dropdown
                     found = False
@@ -1789,7 +1806,7 @@ class ControlEditor(QWidget):
                 control_item.setText(new_control)
 
                 # Store raw action and display readable version
-                readable_action = self._action_to_readable(new_action)
+                readable_action = self._action_to_readable(new_action, get_system_display_hints())
                 action_item.setText(readable_action)
                 action_item.setData(Qt.UserRole, new_action)
 
@@ -1819,7 +1836,7 @@ class ControlEditor(QWidget):
         self.combos_table.setItem(row, 0, control_item)
 
         # Action (display readable, store raw)
-        readable_action = self._action_to_readable(action)
+        readable_action = self._action_to_readable(action, get_system_display_hints())
         action_item = QTableWidgetItem(readable_action)
         action_item.setData(Qt.UserRole, action)  # Store raw action string
         self.combos_table.setItem(row, 1, action_item)
@@ -1859,11 +1876,12 @@ class ControlEditor(QWidget):
         """Delete a combination row"""
         self.combos_table.removeRow(row)
 
-    def _action_to_readable(self, action_str: str) -> str:
+    def _action_to_readable(self, action_str: str, display_hints: dict = None) -> str:
         """Convert action string to human-readable format
 
         Args:
             action_str: Action string like 'KEY_LEFTCTRL+KEY_C'
+            display_hints: Optional dict of KEY_* name -> display character (locale-aware)
 
         Returns:
             Readable string like 'Ctrl+C'
@@ -1901,7 +1919,7 @@ class ControlEditor(QWidget):
                 return "Middle Click"
             return None
 
-        # Symbol key mapping
+        # Symbol key mapping (US layout fallback)
         SYMBOL_MAP = {
             'LEFTBRACE': '[',
             'RIGHTBRACE': ']',
@@ -1941,7 +1959,9 @@ class ControlEditor(QWidget):
                     readable_parts.append("Enter")
                 elif key_name == "ESC":
                     readable_parts.append("Esc")
-                # Check if it's a symbol key
+                # Check display hints first (locale-aware), then fall back to SYMBOL_MAP
+                elif display_hints and part in display_hints:
+                    readable_parts.append(display_hints[part])
                 elif key_name in SYMBOL_MAP:
                     readable_parts.append(SYMBOL_MAP[key_name])
                 elif len(key_name) == 1:
@@ -1964,7 +1984,7 @@ class ControlEditor(QWidget):
     def _update_dp_display(self):
         """Update the double-press action label display"""
         if self._current_dp_action:
-            readable = self._action_to_readable(self._current_dp_action)
+            readable = self._action_to_readable(self._current_dp_action, get_system_display_hints())
             self.dp_action_label.setText(readable)
             self.dp_action_label.setStyleSheet("")  # Normal color
             self.dp_clear_btn.setEnabled(True)

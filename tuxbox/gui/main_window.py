@@ -19,9 +19,11 @@ from .control_editor import ControlEditor, ROTARY_TO_DIAL
 from .config_writer import (save_profile, save_profile_metadata, create_new_profile,
                             profile_exists_in_config, cleanup_old_backups,
                             save_modifier_config, save_mapping_comments, save_haptic_config)
+from .keymap_util import get_system_display_hints
 
 # Import from existing driver code
 from tuxbox.config_loader import load_profiles
+from evdev import ecodes as e
 
 logger = logging.getLogger(__name__)
 
@@ -426,6 +428,52 @@ class TuxBoxConfigWindow(QMainWindow):
         # Disable control editor until a control is selected
         self.control_editor.setEnabled(False)
 
+    def _get_raw_action_string(self, control_name: str) -> str:
+        """Get the raw action string (e.g., 'KEY_LEFTCTRL+KEY_EQUAL') for a control.
+
+        Checks modified_mappings first, then the profile's mapping/modifier data.
+        """
+        # Check pending modifications first
+        if control_name in self.modified_mappings:
+            return self.modified_mappings[control_name]
+
+        if not self.current_profile:
+            return ""
+
+        # Modifier buttons use base_action
+        if control_name in self.current_profile.modifier_buttons:
+            return self.current_profile.modifier_base_actions.get(control_name, "")
+
+        # Regular controls: reverse the hex-code mapping back to action string
+        from tuxbox.config_loader import BUTTON_CODES
+        if control_name not in BUTTON_CODES:
+            return ""
+
+        codes = BUTTON_CODES[control_name]
+        if len(codes) < 2 or not self.current_profile.mapping:
+            return ""
+
+        press_code = bytes([codes[0]])
+        events = self.current_profile.mapping.get(press_code, [])
+        if not events:
+            return ""
+
+        parts = []
+        for event_type, event_code, value in events:
+            if event_type == e.EV_KEY and value == 1:
+                # Find KEY_* or BTN_* name for this code
+                for name, code in vars(e).items():
+                    if (name.startswith('KEY_') or name.startswith('BTN_')) and isinstance(code, int) and code == event_code:
+                        parts.append(name)
+                        break
+            elif event_type == e.EV_REL:
+                for name, code in vars(e).items():
+                    if name.startswith('REL_') and isinstance(code, int) and code == event_code:
+                        parts.append(f"{name}:{value}")
+                        break
+
+        return "+".join(parts) if parts else ""
+
     def _on_control_selected(self, control_name: str):
         """Handle control selection from list
 
@@ -442,19 +490,8 @@ class TuxBoxConfigWindow(QMainWindow):
         # Highlight in controller view
         self.controller_view.highlight_control(control_name, is_modifier)
 
-        # Get current action from controls list table
-        # Find the row for this control
-        current_action = "(unmapped)"
-        for row in range(self.controls_list.table.rowCount()):
-            item = self.controls_list.table.item(row, 0)
-            if item and item.data(Qt.UserRole) == control_name:
-                action_item = self.controls_list.table.item(row, 1)
-                if action_item:
-                    current_action = action_item.text()
-                    # Strip double-press suffix if present (e.g., "B (2×: M)" -> "B")
-                    if " (2×:" in current_action:
-                        current_action = current_action.split(" (2×:")[0]
-                break
+        # Get the raw action string for this control (e.g., 'KEY_LEFTCTRL+KEY_EQUAL')
+        current_action = self._get_raw_action_string(control_name)
 
         # Get comment from profile
         comment = ""
@@ -509,7 +546,7 @@ class TuxBoxConfigWindow(QMainWindow):
             double_press_action=double_press_action,
             double_press_comment=double_press_comment,
             double_click_timeout=double_click_timeout,
-            on_release=on_release
+            on_release=on_release,
         )
 
         # Update status bar
@@ -533,7 +570,8 @@ class TuxBoxConfigWindow(QMainWindow):
         self.save_action.setEnabled(True)
 
         # Convert action string to human-readable format
-        readable_action = self._action_to_readable(action_str)
+        hints = get_system_display_hints()
+        readable_action = self._action_to_readable(action_str, hints)
 
         # Update the controls list display
         for row in range(self.controls_list.table.rowCount()):
@@ -611,7 +649,8 @@ class TuxBoxConfigWindow(QMainWindow):
                         base_action = base_action.split(" (2×:")[0]
                     # Add new double-press suffix if action exists
                     if action_str:
-                        dp_readable = self._action_to_readable(action_str)
+                        dp_hints = get_system_display_hints()
+                        dp_readable = self._action_to_readable(action_str, dp_hints)
                         action_item.setText(f"{base_action} (2×: {dp_readable})")
                     else:
                         action_item.setText(base_action)
@@ -715,27 +754,28 @@ class TuxBoxConfigWindow(QMainWindow):
                 # Update the action column
                 action_item = self.controls_list.table.item(row, 1)
                 if action_item:
+                    mod_hints = get_system_display_hints()
                     # Determine the base readable action
                     if modifier_config.get('is_modifier'):
                         # Show base action for modifiers
                         base_action = modifier_config.get('base_action', '')
                         if base_action:
-                            readable_action = self._action_to_readable(base_action)
+                            readable_action = self._action_to_readable(base_action, mod_hints)
                         else:
                             readable_action = "(no base action)"
                     else:
                         # Non-modifier - show regular action
                         if control_name in self.modified_mappings:
-                            readable_action = self._action_to_readable(self.modified_mappings[control_name])
+                            readable_action = self._action_to_readable(self.modified_mappings[control_name], mod_hints)
                         elif modifier_config.get('base_action'):
-                            readable_action = self._action_to_readable(modifier_config['base_action'])
+                            readable_action = self._action_to_readable(modifier_config['base_action'], mod_hints)
                         else:
                             readable_action = "(unmapped)"
 
                     # Append double-press suffix if configured
                     dp_action = self.current_profile.double_press_actions.get(control_name, '')
                     if dp_action:
-                        dp_readable = self._action_to_readable(dp_action)
+                        dp_readable = self._action_to_readable(dp_action, mod_hints)
                         readable_action = f"{readable_action} (2×: {dp_readable})"
 
                     action_item.setText(readable_action)
@@ -1065,11 +1105,12 @@ class TuxBoxConfigWindow(QMainWindow):
                 "Check the logs for details."
             )
 
-    def _action_to_readable(self, action_str: str) -> str:
+    def _action_to_readable(self, action_str: str, display_hints: dict = None) -> str:
         """Convert action string to human-readable format
 
         Args:
             action_str: Action string like 'KEY_LEFTCTRL+KEY_C'
+            display_hints: Optional dict of KEY_* name -> display character (locale-aware)
 
         Returns:
             Human-readable string like 'Ctrl+C'
@@ -1107,7 +1148,7 @@ class TuxBoxConfigWindow(QMainWindow):
                 return "Middle Click"
             return None
 
-        # Symbol key mapping
+        # Symbol key mapping (US layout fallback)
         SYMBOL_MAP = {
             'LEFTBRACE': '[',
             'RIGHTBRACE': ']',
@@ -1133,8 +1174,10 @@ class TuxBoxConfigWindow(QMainWindow):
                 original_part = part
                 key_name = part.replace("KEY_", "")
 
-                # Check if it's a symbol key FIRST, before stripping LEFT/RIGHT
-                if key_name in SYMBOL_MAP:
+                # Check display hints first (locale-aware), then symbol map
+                if display_hints and original_part in display_hints:
+                    key_name = display_hints[original_part]
+                elif key_name in SYMBOL_MAP:
                     key_name = SYMBOL_MAP[key_name]
                 else:
                     # Don't strip LEFT/RIGHT from arrow keys and navigation keys

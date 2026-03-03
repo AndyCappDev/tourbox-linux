@@ -18,6 +18,7 @@ from evdev import ecodes as e
 from tuxbox.config_loader import Profile, BUTTON_CODES
 
 from tuxbox.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER
+from tuxbox.gui.keymap_util import get_system_display_hints
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,8 @@ class ControlsList(QWidget):
         Returns:
             Human-readable action description
         """
+        display_hints = get_system_display_hints()
+
         try:
             # First check if this control is a modifier button
             if control_name in profile.modifier_buttons:
@@ -195,7 +198,7 @@ class ControlsList(QWidget):
                 if control_name in profile.modifier_base_actions:
                     # Parse base action to get readable text
                     base_action = profile.modifier_base_actions[control_name]
-                    result = self._parse_action_string_to_readable(base_action)
+                    result = self._parse_action_string_to_readable(base_action, display_hints)
                 else:
                     # No base action configured
                     result = "(no base action)"
@@ -203,7 +206,7 @@ class ControlsList(QWidget):
                 # Check for double-press action on modifier buttons too
                 if control_name in profile.double_press_actions:
                     dp_action = profile.double_press_actions[control_name]
-                    dp_readable = self._parse_action_string_to_readable(dp_action)
+                    dp_readable = self._parse_action_string_to_readable(dp_action, display_hints)
                     result = f"{result} (2×: {dp_readable})"
 
                 return result
@@ -239,7 +242,7 @@ class ControlsList(QWidget):
             for event_type, event_code, value in events:
                 logger.debug(f"  Event: type={event_type}, code={event_code}, value={value}")
                 if event_type == e.EV_KEY and value == 1:  # Key press
-                    key_name = self._get_key_name(event_code)
+                    key_name = self._get_key_name(event_code, display_hints)
                     logger.debug(f"    Key name: {key_name}")
                     parts.append(key_name)
                 elif event_type == e.EV_REL:  # Relative movement
@@ -268,7 +271,7 @@ class ControlsList(QWidget):
             # Check for double-press action
             if control_name in profile.double_press_actions:
                 dp_action = profile.double_press_actions[control_name]
-                dp_readable = self._parse_action_string_to_readable(dp_action)
+                dp_readable = self._parse_action_string_to_readable(dp_action, display_hints)
                 result = f"{result} (2×: {dp_readable})"
 
             logger.debug(f"Control {control_name}: final result='{result}'")
@@ -278,11 +281,12 @@ class ControlsList(QWidget):
             logger.error(f"Error getting action text for {control_name}: {ex}", exc_info=True)
             return "(error)"
 
-    def _parse_action_string_to_readable(self, action_str: str) -> str:
+    def _parse_action_string_to_readable(self, action_str: str, display_hints: dict = None) -> str:
         """Parse an action string to human-readable format
 
         Args:
             action_str: Action string like 'KEY_LEFTCTRL' or 'KEY_LEFTCTRL+KEY_C'
+            display_hints: Optional dict of KEY_* name -> display character (locale-aware)
 
         Returns:
             Readable string like 'Ctrl' or 'Ctrl+C'
@@ -359,7 +363,9 @@ class ControlsList(QWidget):
 
                 if key_name in key_map:
                     readable_parts.append(key_map[key_name])
-                # Check if it's a symbol key
+                # Check display hints first (locale-aware), then fall back to SYMBOL_MAP
+                elif display_hints and part in display_hints:
+                    readable_parts.append(display_hints[part])
                 elif key_name in SYMBOL_MAP:
                     readable_parts.append(SYMBOL_MAP[key_name])
                 elif len(key_name) == 1:
@@ -376,7 +382,7 @@ class ControlsList(QWidget):
 
         return "+".join(readable_parts)
 
-    def _get_key_name(self, key_code: int) -> str:
+    def _get_key_name(self, key_code: int, display_hints: dict = None) -> str:
         """Get human-readable key name from evdev code"""
         # Map common symbol keys to their actual symbols
         SYMBOL_MAP = {
@@ -412,6 +418,12 @@ class ControlsList(QWidget):
         # Check preferred names first
         if key_code in PREFERRED_NAMES:
             return PREFERRED_NAMES[key_code]
+
+        # Check display hints (locale-aware) before falling back to US SYMBOL_MAP
+        if display_hints:
+            for name, code in e.__dict__.items():
+                if name.startswith('KEY_') and code == key_code and name in display_hints:
+                    return display_hints[name]
 
         # Check if it's a symbol key
         if key_code in SYMBOL_MAP:
