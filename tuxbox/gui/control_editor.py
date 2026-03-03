@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox
 )
 from PySide6.QtCore import Signal, Qt
+from PySide6.QtGui import QKeyEvent
 from evdev import ecodes as e
 from tuxbox.config_loader import VALID_MODIFIER_BUTTONS
 from tuxbox.gui.ui_constants import TABLE_ROW_HEIGHT_MULTIPLIER, TEXT_EDIT_HEIGHT_MULTIPLIER
@@ -82,6 +83,22 @@ KEYCODE_TO_CHAR = {
     'EQUAL': '=',
 }
 
+# Build reverse lookup: evdev keycode int -> KEY_* name string
+_EVDEV_CODE_TO_NAME = {}
+for _code, _name in e.bytype[e.EV_KEY].items():
+    if isinstance(_name, tuple):
+        _name = _name[0]
+    if _name.startswith('KEY_'):
+        _EVDEV_CODE_TO_NAME[_code] = _name
+
+# Modifier keycodes to ignore during key capture
+_MODIFIER_EVDEV_CODES = {
+    e.KEY_LEFTCTRL, e.KEY_RIGHTCTRL,
+    e.KEY_LEFTALT, e.KEY_RIGHTALT,
+    e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT,
+    e.KEY_LEFTMETA, e.KEY_RIGHTMETA,
+}
+
 # Special keys that can't be reliably typed
 SPECIAL_KEYS = {
     'None': None,
@@ -141,6 +158,87 @@ ROTARY_TO_DIAL = {
     'dial_cw': 'dial',
     'dial_ccw': 'dial',
 }
+
+
+class KeyCaptureLineEdit(QLineEdit):
+    """Custom QLineEdit that captures physical key scancodes instead of typed characters.
+
+    Records the evdev keycode from the native scancode, ensuring correct mapping
+    regardless of keyboard layout.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setPlaceholderText("Press a key")
+        self._evdev_keycode = None
+
+    def keyPressEvent(self, event: QKeyEvent):
+        # Ignore auto-repeat
+        if event.isAutoRepeat():
+            return
+
+        native_sc = event.nativeScanCode()
+        if native_sc == 0:
+            # No scancode available — ignore
+            return
+
+        # X11/Wayland native scancode = evdev keycode + 8
+        evdev_code = native_sc - 8
+
+        # Ignore modifier-only presses
+        if evdev_code in _MODIFIER_EVDEV_CODES:
+            return
+
+        key_name = _EVDEV_CODE_TO_NAME.get(evdev_code)
+        if key_name is None:
+            return
+
+        self._evdev_keycode = evdev_code
+
+        # Display: use the typed character for printable keys, otherwise a readable name
+        char = event.text()
+        if char and char.isprintable():
+            self.setText(char)
+        else:
+            # Strip KEY_ prefix and make readable (e.g. KEY_SPACE -> Space)
+            display = key_name[4:] if key_name.startswith('KEY_') else key_name
+            self.setText(display.capitalize())
+
+        # Clear selection and emit textChanged for mutual-exclusion logic
+        self.deselect()
+
+    def get_key_name(self) -> Optional[str]:
+        """Return the stored KEY_* name string, or None if nothing captured."""
+        if self._evdev_keycode is not None:
+            return _EVDEV_CODE_TO_NAME.get(self._evdev_keycode)
+        return None
+
+    def set_from_key_name(self, key_name: str):
+        """Set state from a KEY_* string (for loading existing configs).
+
+        Args:
+            key_name: e.g. 'KEY_EQUAL', 'KEY_A', 'KEY_SPACE'
+        """
+        # Find evdev code for this name
+        for code, name in _EVDEV_CODE_TO_NAME.items():
+            if name == key_name:
+                self._evdev_keycode = code
+                # Display: use KEYCODE_TO_CHAR if available, otherwise derive from name
+                short = key_name[4:] if key_name.startswith('KEY_') else key_name
+                if short in KEYCODE_TO_CHAR:
+                    self.setText(KEYCODE_TO_CHAR[short])
+                elif len(short) == 1:
+                    self.setText(short.lower())
+                else:
+                    self.setText(short.capitalize())
+                return
+        # Unknown key name — just display it raw
+        self.setText(key_name)
+
+    def clear(self):
+        """Reset captured keycode and display text."""
+        self._evdev_keycode = None
+        super().clear()
 
 
 class ComboConfigDialog(QDialog):
@@ -241,10 +339,8 @@ class ComboConfigDialog(QDialog):
         key_label = QLabel("Key:")
         keyboard_layout.addWidget(key_label)
 
-        self.key_input = QLineEdit()
-        self.key_input.setPlaceholderText("a-z, 0-9")
-        self.key_input.setMaxLength(1)
-        self.key_input.setMaximumWidth(80)
+        self.key_input = KeyCaptureLineEdit()
+        self.key_input.setMaximumWidth(120)
         self.key_input.setMinimumHeight(button_height)
         self.key_input.textChanged.connect(self._on_key_input_changed)
         keyboard_layout.addWidget(self.key_input)
@@ -458,22 +554,20 @@ class ComboConfigDialog(QDialog):
                 self.super_btn.setChecked(True)
             else:
                 # It's the actual key
-                # Strip KEY_ prefix if present
                 key_part = part
-                if key_part.startswith("KEY_"):
-                    key_part = key_part[4:]  # Remove "KEY_" prefix
+                full_key = key_part if key_part.startswith("KEY_") else f"KEY_{key_part}"
 
-                # Convert symbol keycodes to their actual characters
-                if key_part.upper() in KEYCODE_TO_CHAR:
-                    key_part = KEYCODE_TO_CHAR[key_part.upper()]
+                # Check if it maps to a single character (letter, number, symbol)
+                short = full_key[4:]  # Remove KEY_ prefix
+                is_single = (short.upper() in KEYCODE_TO_CHAR or len(short) == 1)
 
-                if len(key_part) == 1:
-                    self.key_input.setText(key_part.lower())
+                if is_single:
+                    self.key_input.set_from_key_name(full_key.upper())
                 else:
                     # Try to match in special keys dropdown
                     for i in range(self.special_key_combo.count()):
                         item_text = self.special_key_combo.itemText(i)
-                        if item_text.lower() == key_part.lower():
+                        if item_text.lower() == short.lower():
                             self.special_key_combo.setCurrentIndex(i)
                             break
 
@@ -519,8 +613,11 @@ class ComboConfigDialog(QDialog):
         if self.super_btn.isChecked():
             parts.append("KEY_LEFTMETA")
 
-        # Add key
-        if self.key_input.text():
+        # Add key (prefer scancode-captured name, fall back to CHAR_TO_KEYCODE)
+        captured = self.key_input.get_key_name()
+        if captured:
+            parts.append(captured)
+        elif self.key_input.text():
             char = self.key_input.text()
             if char in CHAR_TO_KEYCODE:
                 key_name = CHAR_TO_KEYCODE[char]
@@ -625,9 +722,7 @@ class DoublePressDialog(QDialog):
         key_layout = QHBoxLayout()
         key_layout.addWidget(QLabel("Key:"))
 
-        self.key_input = QLineEdit()
-        self.key_input.setPlaceholderText("Type a character")
-        self.key_input.setMaxLength(1)
+        self.key_input = KeyCaptureLineEdit()
         self.key_input.setMaximumWidth(150)
         self.key_input.setMinimumHeight(button_height)
         self.key_input.textChanged.connect(self._on_key_input_changed)
@@ -744,15 +839,16 @@ class DoublePressDialog(QDialog):
                 self.super_btn.setChecked(True)
             else:
                 key_part = part
-                if key_part.startswith("KEY_"):
-                    key_part = key_part[4:]
-                if key_part in KEYCODE_TO_CHAR:
-                    key_part = KEYCODE_TO_CHAR[key_part]
-                if len(key_part) == 1:
-                    self.key_input.setText(key_part.lower())
+                full_key = key_part if key_part.startswith("KEY_") else f"KEY_{key_part}"
+
+                short = full_key[4:]
+                is_single = (short in KEYCODE_TO_CHAR or len(short) == 1)
+
+                if is_single:
+                    self.key_input.set_from_key_name(full_key.upper())
                 else:
                     for i in range(self.special_key_combo.count()):
-                        if self.special_key_combo.itemText(i).upper().replace(" ", "") == key_part.replace("_", ""):
+                        if self.special_key_combo.itemText(i).upper().replace(" ", "") == short.replace("_", ""):
                             self.special_key_combo.setCurrentIndex(i)
                             break
 
@@ -788,7 +884,10 @@ class DoublePressDialog(QDialog):
         if self.super_btn.isChecked():
             parts.append("KEY_LEFTMETA")
 
-        if self.key_input.text():
+        captured = self.key_input.get_key_name()
+        if captured:
+            parts.append(captured)
+        elif self.key_input.text():
             char = self.key_input.text()
             if char in CHAR_TO_KEYCODE:
                 parts.append(f"KEY_{CHAR_TO_KEYCODE[char]}")
@@ -898,10 +997,8 @@ class ControlEditor(QWidget):
         key_label = QLabel("Key:")
         keyboard_layout.addWidget(key_label)
 
-        self.key_input = QLineEdit()
-        self.key_input.setPlaceholderText("a-z, 0-9")
-        self.key_input.setMaxLength(1)
-        self.key_input.setMaximumWidth(80)
+        self.key_input = KeyCaptureLineEdit()
+        self.key_input.setMaximumWidth(120)
         self.key_input.setMinimumHeight(button_height)
         self.key_input.textChanged.connect(self._on_key_input_changed)
         keyboard_layout.addWidget(self.key_input)
@@ -1395,43 +1492,35 @@ class ControlEditor(QWidget):
                 self.super_btn.setChecked(True)
             else:
                 # It's the actual key
-                # Strip KEY_ prefix if present
                 key_part = part
-                if key_part.startswith("KEY_"):
-                    key_part = key_part[4:]  # Remove "KEY_" prefix
+                full_key = key_part if key_part.startswith("KEY_") else f"KEY_{key_part}"
 
-                # Convert symbol keycodes to their actual characters
-                if key_part.upper() in KEYCODE_TO_CHAR:
-                    key_part = KEYCODE_TO_CHAR[key_part.upper()]
+                # Check if it maps to a single character (letter, number, symbol)
+                short = full_key[4:]  # Remove KEY_ prefix
+                is_single = (short.upper() in KEYCODE_TO_CHAR or len(short) == 1)
 
-                # Check if it's a single character (letter, number, or symbol)
-                if len(key_part) == 1:
-                    # It's a character - put it in text field
-                    self.key_input.setText(key_part.lower())
+                if is_single:
+                    self.key_input.set_from_key_name(full_key.upper())
                 else:
                     # It's a special key name - try to match in special keys dropdown
-                    # First try exact match, then try without spaces/underscores/case-insensitive
                     found = False
-                    part_normalized = key_part.lower().replace(' ', '').replace('_', '')
+                    part_normalized = short.lower().replace(' ', '').replace('_', '')
 
                     for i in range(self.special_key_combo.count()):
                         item_text = self.special_key_combo.itemText(i)
                         item_normalized = item_text.lower().replace(' ', '').replace('_', '')
 
-                        # Try exact match first
-                        if item_text.lower() == key_part.lower():
+                        if item_text.lower() == short.lower():
                             self.special_key_combo.setCurrentIndex(i)
                             found = True
                             break
-                        # Try normalized match (no spaces or underscores)
                         elif item_normalized == part_normalized:
                             self.special_key_combo.setCurrentIndex(i)
                             found = True
                             break
 
                     if not found:
-                        # Unknown key, leave dropdown at None
-                        logger.warning(f"Could not parse key: {key_part}")
+                        logger.warning(f"Could not parse key: {short}")
                         self.special_key_combo.setCurrentIndex(0)
 
     def _on_action_type_changed(self, action_type: str):
@@ -1596,22 +1685,20 @@ class ControlEditor(QWidget):
         if self.super_btn.isChecked():
             parts.append("KEY_LEFTMETA")
 
-        # Add key
-        if self.key_input.text():
-            # Convert character to KEY_ code
+        # Add key (prefer scancode-captured name, fall back to CHAR_TO_KEYCODE)
+        captured = self.key_input.get_key_name()
+        if captured:
+            parts.append(captured)
+        elif self.key_input.text():
             char = self.key_input.text()
-
-            # Check if it's a symbol/special character
             if char in CHAR_TO_KEYCODE:
                 key_name = CHAR_TO_KEYCODE[char]
                 parts.append(f"KEY_{key_name}")
             else:
-                # Regular letter (a-z) - just uppercase it
                 parts.append(f"KEY_{char.upper()}")
         elif self.special_key_combo.currentText() != "None":
             key_name = self.special_key_combo.currentText()
             if SPECIAL_KEYS.get(key_name):
-                # Find the KEY_ constant name
                 for name, code in e.__dict__.items():
                     if name.startswith('KEY_') and code == SPECIAL_KEYS[key_name]:
                         parts.append(name)
