@@ -1,7 +1,7 @@
 # TuxBox Configuration GUI - User Guide
 
-**Version:** 3.0.1
-**Last Updated:** 2026-02-16
+**Version:** 3.1.0
+**Last Updated:** 2026-03-13
 
 ## Table of Contents
 
@@ -66,7 +66,7 @@ tuxbox-gui
 
 ## Understanding the Interface
 
-![TuxBox Configuration GUI](images/gui-screenshot.png?v=3.0.1)
+![TuxBox Configuration GUI](images/gui-screenshot.png?v=3.1.0)
 
 The GUI has a 4-panel layout:
 

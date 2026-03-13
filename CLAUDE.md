@@ -96,5 +96,5 @@ System: Python 3.9+, bluez (BLE), user in `dialout` and `input` groups, udev rul
 When bumping the version, update these files:
 - `tuxbox/__init__.py` - VERSION constant
 - `tuxbox/gui/__init__.py` - __version__ constant
-- `README.md` - Version badge at top, image cache-bust parameter
+- `README.md` - shields.io version badge (update version number in badge URL), image cache-bust parameter
 - `docs/GUI_USER_GUIDE.md` - Version number (line 3) and "Last Updated" date (line 4), image cache-bust parameter
