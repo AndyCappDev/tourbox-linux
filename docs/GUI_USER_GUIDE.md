@@ -1,7 +1,7 @@
 # TuxBox Configuration GUI - User Guide
 
-**Version:** 3.1.0
-**Last Updated:** 2026-03-13
+**Version:** 3.1.1
+**Last Updated:** 2026-04-07
 
 ## Table of Contents
 
@@ -1205,11 +1205,13 @@ When the TourBox sends a key combination like Ctrl+Z, it sends the modifier key 
 
 **Modifier key delay** adds a small pause (in milliseconds) between sending the modifier keys (Ctrl, Shift, Alt, Super) and the remaining keys in a combination. This gives the application time to register the modifier before the main key arrives.
 
+> **Mouse combos are handled automatically.** Bindings that mix a modifier with a mouse event -- e.g. `Alt+Scroll Wheel`, `Ctrl+Left Click` -- always get a small built-in delay so the compositor has time to register the modifier before the click or scroll. You do **not** need to enable Modifier Key Delay for these. The setting documented here is specifically for **keyboard-only** combos in stubborn applications like GIMP. If you set a value larger than the built-in floor, your value still wins for mouse combos too.
+
 ### When Do You Need It?
 
 You likely need modifier key delay if:
 
-- **Key combinations don't work in specific applications** -- e.g., pressing a button mapped to Ctrl+Z does nothing in GIMP, but works fine in other apps
+- **Keyboard combinations don't work in specific applications** -- e.g., pressing a button mapped to Ctrl+Z does nothing in GIMP, but works fine in other apps
 - **Only the main key registers** -- e.g., you get "z" instead of "Ctrl+Z"
 - **Combinations work intermittently** -- sometimes the combo registers, sometimes it doesn't
 

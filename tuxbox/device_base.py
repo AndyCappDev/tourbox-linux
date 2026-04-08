@@ -27,6 +27,18 @@ KEYBOARD_MODIFIER_KEYS = {
     e.KEY_LEFTMETA, e.KEY_RIGHTMETA,
 }
 
+# Mouse button keys - paired with KEYBOARD_MODIFIER_KEYS to detect modifier+mouse
+# combos that need a forced delay (see AUTO_MOUSE_MODIFIER_DELAY_MS).
+MOUSE_EVENT_KEYS = {e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE}
+
+# When a single batch contains both a modifier press and a mouse event (REL_* or
+# BTN_LEFT/RIGHT/MIDDLE), we force at least this much delay between the modifier
+# and the mouse event so the compositor has time to latch the modifier into
+# keystate before the pointer event arrives. Without this, apps like DaVinci
+# Resolve see Alt+scroll as a plain scroll. Pure-keyboard combos are not
+# affected and still honor the user's `modifier_delay` setting verbatim.
+AUTO_MOUSE_MODIFIER_DELAY_MS = 15
+
 logger = logging.getLogger(__name__)
 
 # Controls that can be held (buttons) vs momentary (rotary)
@@ -147,10 +159,18 @@ class TuxBoxBase(ABC):
     def _send_events(self, events: List[Tuple[int, int, int]]):
         """Send events to the virtual input device with optional modifier delay
 
-        If modifier_delay is configured and the events contain both keyboard
-        modifier keys (Ctrl, Shift, Alt, Meta) and non-modifier keys, sends
-        the modifier keys first, syncs, waits for the delay, then sends the
-        remaining keys. This helps applications recognize key combinations.
+        If the batch contains a modifier key press (Ctrl/Shift/Alt/Meta) along
+        with other events, the modifier is sent first, syned, then the rest of
+        the events are sent after a delay. This helps applications recognize
+        key combinations.
+
+        The delay used is `max(self.modifier_delay, AUTO_MOUSE_MODIFIER_DELAY_MS)`
+        when the batch mixes a modifier with a mouse event (REL_* or BTN_LEFT/
+        RIGHT/MIDDLE), and `self.modifier_delay` otherwise. The auto-delay
+        exists because compositors need a moment to latch a modifier into
+        keystate before processing pointer events; without it, things like
+        Alt+scroll get delivered as plain scrolls. Pure keyboard combos still
+        honor `self.modifier_delay` verbatim (default 0).
 
         Args:
             events: List of (event_type, event_code, value) tuples
@@ -158,36 +178,45 @@ class TuxBoxBase(ABC):
         if not events or not self.controller:
             return
 
-        # Check if we need to apply modifier delay
-        if self.modifier_delay > 0:
-            # Separate modifier key presses from other events
-            modifier_presses = []
-            other_events = []
+        # Single pass: partition events and detect mouse-mixing.
+        modifier_presses = []
+        other_events = []
+        has_mouse_event = False
 
-            for event in events:
-                event_type, event_code, value = event
-                if (event_type == e.EV_KEY and
-                    value == 1 and
-                    event_code in KEYBOARD_MODIFIER_KEYS):
-                    modifier_presses.append(event)
-                else:
-                    other_events.append(event)
+        for event in events:
+            event_type, event_code, value = event
+            if (event_type == e.EV_KEY and
+                value == 1 and
+                event_code in KEYBOARD_MODIFIER_KEYS):
+                modifier_presses.append(event)
+            else:
+                other_events.append(event)
+                if event_type == e.EV_REL:
+                    has_mouse_event = True
+                elif (event_type == e.EV_KEY and
+                      value == 1 and
+                      event_code in MOUSE_EVENT_KEYS):
+                    has_mouse_event = True
 
-            # If we have both modifiers and other events, send with delay
-            if modifier_presses and other_events:
-                # Send modifier keys first
-                for event in modifier_presses:
-                    self.controller.write(*event)
-                self.controller.syn()
+        # Compute the delay to use for this batch. Mouse+modifier combos get
+        # the auto floor; everything else just uses the configured value.
+        effective_delay = self.modifier_delay
+        if modifier_presses and has_mouse_event:
+            effective_delay = max(effective_delay, AUTO_MOUSE_MODIFIER_DELAY_MS)
 
-                # Wait for modifier delay
-                time.sleep(self.modifier_delay / 1000.0)
+        # If we have both modifiers and other events and a non-zero delay,
+        # send the modifier first, wait, then send the rest.
+        if effective_delay > 0 and modifier_presses and other_events:
+            for event in modifier_presses:
+                self.controller.write(*event)
+            self.controller.syn()
 
-                # Send remaining events
-                for event in other_events:
-                    self.controller.write(*event)
-                self.controller.syn()
-                return
+            time.sleep(effective_delay / 1000.0)
+
+            for event in other_events:
+                self.controller.write(*event)
+            self.controller.syn()
+            return
 
         # No delay needed - send all events normally
         for event in events:

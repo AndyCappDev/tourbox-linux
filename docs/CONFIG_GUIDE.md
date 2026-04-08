@@ -117,7 +117,7 @@ Configures your TourBox device connection.
 
 **Available settings:**
 - `mac_address` - Your TourBox's Bluetooth MAC address (XX:XX:XX:XX:XX:XX) - Elite/Elite Plus only
-- `modifier_delay` - Milliseconds to wait between modifier keys (Ctrl/Shift/Alt/Meta) and other keys when sending key combinations. Default: `0` (disabled). Set to `20`-`50` if apps like GIMP don't recognize key combos. Can be overridden per-profile in `.profile` files (see below).
+- `modifier_delay` - Milliseconds to wait between modifier keys (Ctrl/Shift/Alt/Meta) and other **keyboard** keys when sending key combinations. Default: `0` (disabled). Set to `20`-`50` if apps like GIMP don't recognize keyboard combos. Can be overridden per-profile in `.profile` files (see below). **Note:** modifier+mouse combos (e.g. Alt+scroll, Ctrl+click) get a small built-in delay automatically and do not require this setting.
 
 **How to find your MAC address:**
 ```bash
@@ -454,7 +454,9 @@ scroll_down = KEY_LEFTCTRL+KEY_MINUS
 
 ## Modifier Key Delay
 
-Some applications (notably GIMP) don't recognize key combinations when the modifier key and main key arrive at nearly the same time. The `modifier_delay` setting adds a small pause between them.
+Some applications (notably GIMP) don't recognize **keyboard** combinations when the modifier key and the main key arrive at nearly the same time. The `modifier_delay` setting adds a small pause between them.
+
+> **Mouse combos are handled automatically.** When a binding mixes a modifier (Ctrl/Shift/Alt/Meta) with a mouse event (`REL_WHEEL`, `REL_HWHEEL`, `BTN_LEFT`, `BTN_RIGHT`, `BTN_MIDDLE`), TuxBox always inserts a small delay between the modifier press and the mouse event so the compositor has time to latch the modifier into keystate. You do **not** need to set `modifier_delay` for things like `KEY_LEFTALT+REL_WHEEL:1` (Alt+scroll) or `KEY_LEFTCTRL+BTN_LEFT` (Ctrl+click). If you have set `modifier_delay` to a value larger than the built-in floor, your value wins.
 
 ### Global Setting
 
