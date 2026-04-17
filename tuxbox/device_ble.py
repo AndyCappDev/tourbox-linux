@@ -168,8 +168,12 @@ class TuxBoxBLE(TuxBoxBase):
 
     def disconnection_handler(self, client):
         """Handle disconnection from TourBox Elite"""
+        # Bleak/bluez can invoke this callback multiple times for a single
+        # failing session (e.g. during connect retries). Only react to the
+        # first one so logs and modifier-reset don't fire repeatedly.
+        if self.disconnected:
+            return
         self.disconnected = True
-        # Clear modifier state on disconnect to prevent stuck modifiers
         self.clear_modifier_state()
         logger.warning("TourBox Elite disconnected")
         print("\nTourBox Elite disconnected - waiting for reconnection...")
@@ -308,8 +312,8 @@ class TuxBoxBLE(TuxBoxBase):
                 return True
 
         except asyncio.TimeoutError:
-            logger.error("Connection timeout - device not found")
-            print("Connection timeout - is the TourBox Elite turned on?")
+            logger.error("Timed out establishing BLE connection to TourBox")
+            print("Timed out connecting to TourBox - will retry")
             return True  # Retry
         except Exception as ex:
             logger.error(f"Connection error: {ex}")
