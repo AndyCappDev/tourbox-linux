@@ -30,6 +30,16 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_USB_PORT = "/dev/ttyACM0"
 
+# How often the auto-detect supervisor rescans for a USB TourBox while the
+# BLE transport is active. Cheap glob check first; full probe only if a
+# /dev/ttyACM* device is actually present.
+USB_RESCAN_INTERVAL = 3.0
+
+# Grace period to let the BLE driver wind down after kill_now is set before
+# we forcibly cancel its task. Bleak scans can be up to ~10s, so this needs
+# headroom.
+BLE_SHUTDOWN_TIMEOUT = 15.0
+
 # Unlock command used to probe for TourBox
 UNLOCK_COMMAND = bytes.fromhex("5500078894001afe")
 
@@ -127,6 +137,82 @@ def find_tuxbox_usb_port(configured_port: str = None) -> str:
     return None
 
 
+async def _wait_for_ble_to_stop(ble_task):
+    """Wait for a TuxBoxBLE.start() task to wind down after kill_now is set.
+
+    Falls back to cancellation if the driver does not stop within
+    BLE_SHUTDOWN_TIMEOUT (e.g. stuck mid-scan inside bleak).
+    """
+    try:
+        await asyncio.wait_for(asyncio.shield(ble_task), timeout=BLE_SHUTDOWN_TIMEOUT)
+    except asyncio.TimeoutError:
+        logger.warning(
+            f"BLE driver did not exit gracefully within {BLE_SHUTDOWN_TIMEOUT:.0f}s; "
+            "cancelling"
+        )
+        ble_task.cancel()
+        try:
+            await ble_task
+        except (asyncio.CancelledError, Exception):
+            pass
+
+
+async def auto_detect_loop(args, configured_usb_port):
+    """Auto-detect transport with USB hot-plug awareness.
+
+    Once USB is selected the supervisor steps out of the way: TuxBoxUSB has
+    its own internal hot-plug + reconnect loop and handles cable
+    disconnect/reconnect itself.
+
+    When USB is absent at startup, the supervisor runs TuxBoxBLE alongside
+    a watcher that promotes to USB the moment a TourBox-responsive
+    /dev/ttyACM* device appears. This is the common case for users who
+    log in before plugging the cable in, or who share the device across
+    multiple computers.
+    """
+    from .device_usb import TuxBoxUSB
+    from .device_ble import TuxBoxBLE
+
+    while True:
+        usb_port = find_tuxbox_usb_port(configured_usb_port)
+
+        if usb_port:
+            logger.info(f"Auto-detected TourBox at {usb_port}")
+            print(f"Found TourBox on USB ({usb_port})")
+            await TuxBoxUSB(port=usb_port, config_path=args.config).start()
+            return
+
+        logger.info("No TourBox USB device found, using BLE")
+        print("No USB device found, using Bluetooth")
+        ble_driver = TuxBoxBLE(config_path=args.config)
+        ble_task = asyncio.create_task(ble_driver.start())
+        promoted_to_usb = False
+
+        try:
+            while not ble_task.done():
+                await asyncio.sleep(USB_RESCAN_INTERVAL)
+                # Cheap glob first; only run the full probe if a port exists
+                if not glob.glob("/dev/ttyACM*"):
+                    continue
+                detected = find_tuxbox_usb_port(configured_usb_port)
+                if not detected:
+                    continue
+                logger.info(
+                    f"USB device detected at {detected} - "
+                    "switching from BLE to USB"
+                )
+                print("\nUSB cable detected - switching to USB connection...")
+                ble_driver.killer.kill_now = True
+                promoted_to_usb = True
+                break
+        finally:
+            await _wait_for_ble_to_stop(ble_task)
+
+        if not promoted_to_usb:
+            # BLE task ended on its own (signal received, or unrecoverable error).
+            return
+
+
 def main():
     """Main entry point with auto-detection"""
 
@@ -171,56 +257,42 @@ def main():
         print("Error: Cannot specify both --usb and --ble")
         sys.exit(1)
 
-    if args.usb:
-        mode = 'usb'
-        logger.info("USB mode forced via --usb flag")
-    elif args.ble:
-        mode = 'ble'
-        logger.info("BLE mode forced via --ble flag")
-    else:
-        # Auto-detect: scan for TourBox USB device
-        print("Scanning for TourBox...")
-        detected_port = find_tuxbox_usb_port(usb_port)
-        if detected_port:
-            mode = 'usb'
-            usb_port = detected_port
-            logger.info(f"Auto-detected TourBox at {usb_port}")
-            print(f"Found TourBox on USB ({usb_port})")
-        else:
-            mode = 'ble'
-            logger.info("No TourBox USB device found, using BLE")
-            print("No USB device found, using Bluetooth")
+    try:
+        if args.usb:
+            logger.info("USB mode forced via --usb flag")
+            from .device_usb import TuxBoxUSB
 
-    # Start appropriate driver
-    if mode == 'usb':
-        from .device_usb import TuxBoxUSB
+            # Scan for the device if no explicit port was given
+            if not args.port:
+                detected_port = find_tuxbox_usb_port(usb_port)
+                if detected_port:
+                    usb_port = detected_port
+                elif not os.path.exists(usb_port):
+                    print("Error: No TourBox found on USB")
+                    print("Is the TourBox connected via USB cable?")
+                    print("Checked: /dev/ttyACM* devices")
+                    sys.exit(1)
 
-        # If USB mode was forced, scan for the device
-        if args.usb and not args.port:
-            detected_port = find_tuxbox_usb_port(usb_port)
-            if detected_port:
-                usb_port = detected_port
-            elif not os.path.exists(usb_port):
-                print(f"Error: No TourBox found on USB")
-                print("Is the TourBox connected via USB cable?")
-                print(f"Checked: /dev/ttyACM* devices")
+            if not os.path.exists(usb_port):
+                print(f"Error: USB port {usb_port} not found")
+                print("Is the TourBox connected via USB?")
                 sys.exit(1)
 
-        if not os.path.exists(usb_port):
-            print(f"Error: USB port {usb_port} not found")
-            print("Is the TourBox connected via USB?")
-            sys.exit(1)
+            asyncio.run(TuxBoxUSB(port=usb_port, config_path=args.config).start())
 
-        driver = TuxBoxUSB(port=usb_port, config_path=args.config)
+        elif args.ble:
+            logger.info("BLE mode forced via --ble flag")
+            from .device_ble import TuxBoxBLE
+            asyncio.run(TuxBoxBLE(config_path=args.config).start())
 
-    else:  # BLE mode
-        from .device_ble import TuxBoxBLE
+        else:
+            # Auto-detect with USB hot-plug awareness. The supervisor stays
+            # alive across the full session so that plugging the cable in
+            # after login (or replugging after using the device on another
+            # computer) is picked up automatically without a service restart.
+            print("Scanning for TourBox...")
+            asyncio.run(auto_detect_loop(args, usb_port))
 
-        driver = TuxBoxBLE(config_path=args.config)
-
-    # Run the driver
-    try:
-        asyncio.run(driver.start())
     except KeyboardInterrupt:
         print("\nExited by user")
     except Exception as e:
