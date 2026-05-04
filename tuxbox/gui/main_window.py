@@ -1397,7 +1397,9 @@ with full GUI configuration support.</p>
 
         # Handle button click
         if msg.clickedButton() == view_btn:
-            webbrowser.open("https://github.com/AndyCappDev/tuxbox/releases")
+            webbrowser.open(
+                f"https://github.com/AndyCappDev/tuxbox/releases/tag/v{latest_version}"
+            )
 
     def _on_no_update(self, current_version: str):
         """Handle no update available signal"""
