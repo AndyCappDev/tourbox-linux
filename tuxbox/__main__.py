@@ -43,6 +43,109 @@ BLE_SHUTDOWN_TIMEOUT = 15.0
 # Unlock command used to probe for TourBox
 UNLOCK_COMMAND = bytes.fromhex("5500078894001afe")
 
+# Known TourBox USB (vid, pid) pairs. The supervisor uses these to filter
+# /dev/ttyACM* candidates before sending the unlock probe, so devices that
+# obviously aren't TourBoxes (Arduinos, 3D printer boards, modems) don't
+# receive the unlock bytes every USB_RESCAN_INTERVAL.
+#
+# Conservative on purpose: the only entries here are pairs we have direct
+# hardware evidence for. The manufacturer-string fallback below catches
+# unrecognized firmware variants without weakening the filter for genuine
+# non-TourBox hardware. If sysfs lookup itself fails (older kernels, unusual
+# udev), the resolver returns None and the caller falls through to probing.
+TOURBOX_USB_IDS = frozenset([
+    (0xc251, 0x2005),  # TourBox Elite, Elite Plus (TourBoxTech via Keil VID)
+])
+
+# Substring (case-insensitive) checked against the device's iManufacturer
+# string from sysfs when the (vid, pid) pair isn't in the allowlist above.
+TOURBOX_MANUFACTURER_HINT = "tourbox"
+
+# Ports we've already logged a "not-a-TourBox" skip for. The supervisor
+# rescans every USB_RESCAN_INTERVAL while in BLE mode, so without this
+# guard a non-TourBox CDC-ACM device on the bus would emit a skip log
+# every tick. First-sight only is enough to surface the device.
+_SKIPPED_PORTS_LOGGED = set()
+
+
+def _read_sysfs_usb_attrs(port: str):
+    """Read USB descriptor attributes for a /dev/ttyACM* port via sysfs.
+
+    For a CDC-ACM device, /sys/class/tty/<name>/device is the interface
+    directory; idVendor/idProduct/manufacturer live one level up on the
+    parent USB device directory.
+
+    Returns a dict with any subset of {vid, pid, manufacturer} that could
+    be read, or None if no attributes were readable. None means the caller
+    should fall through to probing (preserving master behavior on systems
+    where sysfs isn't usable for whatever reason).
+    """
+    try:
+        name = os.path.basename(port)
+        device_dir = os.path.realpath(f"/sys/class/tty/{name}/device")
+        usb_dev_dir = os.path.dirname(device_dir)
+        out = {}
+        for key, fname in (("vid", "idVendor"), ("pid", "idProduct")):
+            try:
+                with open(os.path.join(usb_dev_dir, fname)) as f:
+                    out[key] = int(f.read().strip(), 16)
+            except (OSError, ValueError):
+                pass
+        try:
+            with open(os.path.join(usb_dev_dir, "manufacturer")) as f:
+                out["manufacturer"] = f.read().strip()
+        except OSError:
+            pass
+        return out if out else None
+    except Exception:
+        return None
+
+
+def _is_likely_tourbox(port: str):
+    """Decide whether `port` is worth sending the unlock probe to.
+
+    Returns True if the port matches a known TourBox (vid, pid) pair or its
+    iManufacturer string contains the TourBox hint. Returns False if sysfs
+    positively identifies the port as something else. Returns None if sysfs
+    isn't usable for this port, in which case the caller should fall through
+    to probing.
+    """
+    attrs = _read_sysfs_usb_attrs(port)
+    if not attrs:
+        return None
+    vid = attrs.get("vid")
+    pid = attrs.get("pid")
+    if vid is not None and pid is not None and (vid, pid) in TOURBOX_USB_IDS:
+        return True
+    mfr = attrs.get("manufacturer", "")
+    if mfr and TOURBOX_MANUFACTURER_HINT in mfr.lower():
+        if vid is not None and pid is not None:
+            logger.info(
+                f"{port} reports unrecognized USB ID {vid:04x}:{pid:04x} "
+                f"with manufacturer {mfr!r}; probing anyway"
+            )
+        return True
+    if vid is None or pid is None:
+        # Partial sysfs read; safer to fall through and probe.
+        return None
+    return False
+
+
+def _probe_if_eligible(port: str) -> bool:
+    """Apply the not-a-TourBox filter, then probe if the port survives.
+
+    Returns True if the port both passes the filter (or sysfs is unusable
+    and we fall through) and responds to the unlock command. False means
+    either sysfs identified the port as something else, or the probe came
+    back empty.
+    """
+    if _is_likely_tourbox(port) is False:
+        if port not in _SKIPPED_PORTS_LOGGED:
+            logger.debug(f"  Skipping {port}: USB IDs do not match TourBox")
+            _SKIPPED_PORTS_LOGGED.add(port)
+        return False
+    return probe_usb_device(port)
+
 
 def probe_usb_device(port: str) -> bool:
     """Probe a USB serial port to check if it's a TourBox Elite
@@ -111,10 +214,10 @@ def find_tuxbox_usb_port(configured_port: str = None) -> str:
     Returns:
         Port path if found, None otherwise
     """
-    # If a specific port is configured, try it first
+    # If a specific port is configured, try it first.
     if configured_port and os.path.exists(configured_port):
         logger.debug(f"Trying configured port: {configured_port}")
-        if probe_usb_device(configured_port):
+        if _probe_if_eligible(configured_port):
             return configured_port
 
     # Scan all ttyACM devices
@@ -131,7 +234,7 @@ def find_tuxbox_usb_port(configured_port: str = None) -> str:
         if port == configured_port:
             continue
 
-        if probe_usb_device(port):
+        if _probe_if_eligible(port):
             return port
 
     return None
