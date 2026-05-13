@@ -87,8 +87,8 @@ KEYCODE_TO_CHAR = {
 # Build reverse lookup: evdev keycode int -> KEY_* name string
 _EVDEV_CODE_TO_NAME = {}
 for _code, _name in e.bytype[e.EV_KEY].items():
-    if isinstance(_name, tuple):
-        _name = _name[0]
+    if isinstance(_name, (tuple, list)):
+        _name = sorted(list(_name), key=len)[0]
     if _name.startswith('KEY_'):
         _EVDEV_CODE_TO_NAME[_code] = _name
 
@@ -644,10 +644,9 @@ class ComboConfigDialog(QDialog):
         elif self.special_key_combo.currentText() != "None":
             key_name = self.special_key_combo.currentText()
             if SPECIAL_KEYS.get(key_name):
-                for name, code in e.__dict__.items():
-                    if name.startswith('KEY_') and code == SPECIAL_KEYS[key_name]:
-                        parts.append(name)
-                        break
+                code = SPECIAL_KEYS[key_name]
+                if code in _EVDEV_CODE_TO_NAME:
+                    parts.append(_EVDEV_CODE_TO_NAME[code])
 
         return "+".join(parts) if parts else "none"
 
@@ -913,10 +912,9 @@ class DoublePressDialog(QDialog):
         elif self.special_key_combo.currentText() != "None":
             key_name = self.special_key_combo.currentText()
             if SPECIAL_KEYS.get(key_name):
-                for name, code in e.__dict__.items():
-                    if name.startswith('KEY_') and code == SPECIAL_KEYS[key_name]:
-                        parts.append(name)
-                        break
+                code = SPECIAL_KEYS[key_name]
+                if code in _EVDEV_CODE_TO_NAME:
+                    parts.append(_EVDEV_CODE_TO_NAME[code])
 
         return "+".join(parts) if parts else ""
 
@@ -1716,10 +1714,9 @@ class ControlEditor(QWidget):
         elif self.special_key_combo.currentText() != "None":
             key_name = self.special_key_combo.currentText()
             if SPECIAL_KEYS.get(key_name):
-                for name, code in e.__dict__.items():
-                    if name.startswith('KEY_') and code == SPECIAL_KEYS[key_name]:
-                        parts.append(name)
-                        break
+                code = SPECIAL_KEYS[key_name]
+                if code in _EVDEV_CODE_TO_NAME:
+                    parts.append(_EVDEV_CODE_TO_NAME[code])
 
         return "+".join(parts) if parts else "none"
 
