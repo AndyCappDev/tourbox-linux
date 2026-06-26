@@ -162,6 +162,16 @@ KEY_NAMES = {
     'KEY_DOT': e.KEY_DOT,
     'KEY_SLASH': e.KEY_SLASH,
     'KEY_PERIOD': e.KEY_DOT,  # Alias for KEY_DOT
+    # Numpad keys
+    **{f'KEY_KP{i}': getattr(e, f'KEY_KP{i}') for i in range(0, 10)},
+    'KEY_KPMINUS': e.KEY_KPMINUS,
+    'KEY_KPPLUS': e.KEY_KPPLUS,
+    'KEY_KPASTERISK': e.KEY_KPASTERISK,
+    'KEY_KPSLASH': e.KEY_KPSLASH,
+    'KEY_KPDOT': e.KEY_KPDOT,
+    'KEY_KPENTER': e.KEY_KPENTER,
+    'KEY_KPEQUAL': e.KEY_KPEQUAL,
+    'KEY_NUMLOCK': e.KEY_NUMLOCK,
     # Media keys
     'KEY_VOLUMEUP': e.KEY_VOLUMEUP,
     'KEY_VOLUMEDOWN': e.KEY_VOLUMEDOWN,
