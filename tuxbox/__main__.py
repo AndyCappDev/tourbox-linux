@@ -55,6 +55,9 @@ UNLOCK_COMMAND = bytes.fromhex("5500078894001afe")
 # udev), the resolver returns None and the caller falls through to probing.
 TOURBOX_USB_IDS = frozenset([
     (0xc251, 0x2005),  # TourBox Elite, Elite Plus (TourBoxTech via Keil VID)
+    (0x2e3c, 0x5740),  # TourBox Neo (Artery AT32 generic CDC ID, shared with
+                       # AT32 hobbyist boards; the negative-probe cache below
+                       # stops repeat probing of false matches).
 ])
 
 # Substring (case-insensitive) checked against the device's iManufacturer
@@ -66,6 +69,19 @@ TOURBOX_MANUFACTURER_HINT = "tourbox"
 # guard a non-TourBox CDC-ACM device on the bus would emit a skip log
 # every tick. First-sight only is enough to surface the device.
 _SKIPPED_PORTS_LOGGED = set()
+
+# Ports that passed the VID/PID filter but didn't respond to the unlock
+# probe. Without this, a non-TourBox device sharing an allowlisted VID/PID
+# (e.g. an AT32 hobbyist board on 2e3c:5740) would receive the unlock
+# command every USB_RESCAN_INTERVAL. Cleared per pass for ports that have
+# disappeared from /dev/ttyACM*, so a replug retriggers a fresh probe.
+_PROBED_NEGATIVE_PORTS = set()
+
+
+def _forget_disappeared_ports(current_ports):
+    """Drop cached skip/negative state for ports no longer present."""
+    _SKIPPED_PORTS_LOGGED.intersection_update(current_ports)
+    _PROBED_NEGATIVE_PORTS.intersection_update(current_ports)
 
 
 def _read_sysfs_usb_attrs(port: str):
@@ -144,7 +160,12 @@ def _probe_if_eligible(port: str) -> bool:
             logger.debug(f"  Skipping {port}: USB IDs do not match TourBox")
             _SKIPPED_PORTS_LOGGED.add(port)
         return False
-    return probe_usb_device(port)
+    if port in _PROBED_NEGATIVE_PORTS:
+        return False
+    if probe_usb_device(port):
+        return True
+    _PROBED_NEGATIVE_PORTS.add(port)
+    return False
 
 
 def probe_usb_device(port: str) -> bool:
@@ -222,6 +243,10 @@ def find_tuxbox_usb_port(configured_port: str = None) -> str:
 
     # Scan all ttyACM devices
     acm_devices = sorted(glob.glob("/dev/ttyACM*"))
+
+    # Drop cached skip/negative-probe state for ports that have disappeared,
+    # so a replug retriggers fresh evaluation.
+    _forget_disappeared_ports(set(acm_devices))
 
     if not acm_devices:
         logger.debug("No /dev/ttyACM* devices found")
