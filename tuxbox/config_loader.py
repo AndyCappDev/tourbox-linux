@@ -162,6 +162,19 @@ KEY_NAMES = {
     'KEY_DOT': e.KEY_DOT,
     'KEY_SLASH': e.KEY_SLASH,
     'KEY_PERIOD': e.KEY_DOT,  # Alias for KEY_DOT
+    # Numpad keys
+    'KEY_KP1': e.KEY_KP1,
+    'KEY_KP2': e.KEY_KP2,
+    'KEY_KP3': e.KEY_KP3,
+    'KEY_KP4': e.KEY_KP4,
+    'KEY_KP5' : e.KEY_KP5,
+    'KEY_KP6' : e.KEY_KP6,
+    'KEY_KP7': e.KEY_KP7,
+    'KEY_KP8': e.KEY_KP8,
+    'KEY_KP9': e.KEY_KP9,
+    'KEY_KPMINUS': e.KEY_KPMINUS,
+    'KEY_KPPLUS': e.KEY_KPPLUS,
+    'KEY_KPDOT': e.KEY_KPDOT,
     # Media keys
     'KEY_VOLUMEUP': e.KEY_VOLUMEUP,
     'KEY_VOLUMEDOWN': e.KEY_VOLUMEDOWN,
