@@ -88,6 +88,7 @@ class WindowMonitor:
             ('gnome', self._test_gnome),
             ('kde', self._test_kde),
             ('niri', self._test_niri),
+            ('mango', self._test_mango),
             ('x11', self._test_x11),
         ]
 
@@ -117,6 +118,18 @@ class WindowMonitor:
         try:
             result = subprocess.run(
                 ['niri', 'msg', 'version'],
+                capture_output=True,
+                timeout=1
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
+            
+    def _test_mango(self) -> bool:
+        """Test if Mango is running"""
+        try:
+            result = subprocess.run(
+                ['mmsg', 'get', 'version'],
                 capture_output=True,
                 timeout=1
             )
@@ -199,6 +212,8 @@ class WindowMonitor:
                 return self._get_kde_window()
             elif self.compositor == 'niri':
                 return self._get_niri_window()
+            elif self.compositor == 'mango':
+                return self._get_mango_window()
             elif self.compositor == 'x11':
                 return self._get_x11_window()
         except Exception as e:
@@ -295,7 +310,32 @@ class WindowMonitor:
             logger.debug(f"Niri window detection error: {e}")
 
         return None
+    
+    def _get_mango_window(self) -> Optional[WindowInfo]:
+        """Get active window from Mango"""
+        try:
+            result = subprocess.run(
+                ['mmsg', 'get', "focusing-client"],
+                capture_output=True,
+                text=True,
+                timeout=1
+            )
 
+            if result.returncode != 0:
+                return None
+
+            window = json.loads(result.stdout)
+
+            return WindowInfo(
+                app_id=window.get('appid', ''),
+                title=window.get('title', ''),
+                wm_class=window.get('appid', '')
+            )
+        except Exception as e:
+            logger.debug(f"Mango window detection error: {e}")
+
+        return None
+ 
     def _get_gnome_window(self) -> Optional[WindowInfo]:
         """Get active window from GNOME Shell
 
