@@ -54,7 +54,6 @@ if [ -f /run/ostree-booted ] && command -v rpm-ostree &> /dev/null; then
     PKG_MANAGER="rpm-ostree"
     PKG_INSTALL="rpm-ostree install"
     PKG_BLUEZ="bluez"
-    PKG_PIP="python3-pip"
     PKG_GCC="gcc"
     PKG_PYTHON_DEV="python3-devel"
     PKG_KERNEL_HEADERS="kernel-headers"
@@ -63,7 +62,6 @@ elif command -v apt &> /dev/null; then
     PKG_MANAGER="apt"
     PKG_INSTALL="sudo apt install"
     PKG_BLUEZ="bluez"
-    PKG_PIP="python3-pip"
     PKG_GCC="gcc"
     PKG_PYTHON_DEV="python3-dev"
     PKG_KERNEL_HEADERS="linux-headers-generic"
@@ -71,7 +69,6 @@ elif command -v dnf &> /dev/null; then
     PKG_MANAGER="dnf"
     PKG_INSTALL="sudo dnf install"
     PKG_BLUEZ="bluez"
-    PKG_PIP="python3-pip"
     PKG_GCC="gcc"
     PKG_PYTHON_DEV="python3-devel"
     PKG_KERNEL_HEADERS="kernel-headers"
@@ -79,7 +76,6 @@ elif command -v pacman &> /dev/null; then
     PKG_MANAGER="pacman"
     PKG_INSTALL="sudo pacman -S"
     PKG_BLUEZ="bluez"
-    PKG_PIP="python-pip"
     PKG_GCC="gcc"
     PKG_PYTHON_DEV="python"
     PKG_KERNEL_HEADERS="linux-headers"
@@ -98,15 +94,9 @@ MISSING_DEPS=()
 MISSING_PKG_NAMES=()
 
 # Check for bluetooth
-if ! command -v bluetoothctl &> /dev/null; then
+if ! command -v bluetoothctl &> /dev/null && ! command -v bluetui &> /dev/null; then
     MISSING_DEPS+=("bluetoothctl")
     MISSING_PKG_NAMES+=("$PKG_BLUEZ")
-fi
-
-# Check for pip
-if ! python3 -m pip --version &> /dev/null; then
-    MISSING_DEPS+=("pip")
-    MISSING_PKG_NAMES+=("$PKG_PIP")
 fi
 
 # Check for venv module by checking for ensurepip (which is what actually fails)
