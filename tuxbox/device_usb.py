@@ -27,6 +27,17 @@ DEFAULT_USB_PORT = "/dev/ttyACM0"
 # Unlock command (same as BLE)
 UNLOCK_COMMAND = bytes.fromhex("5500078894001afe")
 
+# Reads at or above this size are treated as a device response frame (the
+# unlock/config reply is ~26 bytes) rather than input. Button events are
+# single bytes, so a burst this large is never a sequence of presses.
+#
+# Decoding one as input is actively harmful, not just noisy: a response
+# frame's trailing run of 0x00 bytes maps to 'tall', so the driver injects
+# a stream of key presses with no matching releases and leaves a modifier
+# stuck down. Frames appear here whenever something else writes to the
+# port - another process probing it, or a reply we didn't consume.
+RESPONSE_FRAME_MIN_BYTES = 20
+
 # Note: CONFIG_COMMANDS are now built dynamically by build_config_message_usb()
 # from haptic.py to support per-profile haptic settings
 
@@ -174,6 +185,14 @@ class TuxBoxUSB(TuxBoxBase):
                         None,
                         lambda: self.serial.read(self.serial.in_waiting)
                     )
+
+                    if len(data) >= RESPONSE_FRAME_MIN_BYTES:
+                        logger.warning(
+                            f"Discarded {len(data)}-byte device response frame "
+                            f"({data.hex()[:40]}...). Another process may be "
+                            f"writing to {self.port} - check: fuser -v {self.port}"
+                        )
+                        continue
 
                     # Process each byte as a button code (same as BLE)
                     for byte in data:
