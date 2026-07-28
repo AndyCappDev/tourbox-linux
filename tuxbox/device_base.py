@@ -801,6 +801,17 @@ class TuxBoxBase(ABC):
 
                 # Send input events to virtual device
                 self._send_events(mapping)
+            elif control_info:
+                # Recognized control, just not bound in the active profile.
+                # Normal for a partially-configured profile, so this is debug
+                # rather than a warning (see #53).
+                control_name, is_press = control_info
+                profile_name = self.current_profile.name if self.current_profile else "none"
+                action = "press" if is_press else "release"
+                logger.debug(
+                    f"No binding for {control_name} ({action}) in profile "
+                    f"'{profile_name}' [{data_bytes.hex()}]"
+                )
             else:
                 logger.warning(f"Unknown button code: {data_bytes.hex()}")
 

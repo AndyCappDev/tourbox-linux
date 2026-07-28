@@ -14,7 +14,7 @@ from typing import Optional
 from bleak import BleakClient, BleakScanner
 from bleak.backends.device import BLEDevice
 from dbus_fast.aio import MessageBus
-from dbus_fast import BusType, Message
+from dbus_fast import BusType, Message, MessageType
 from evdev import UInput
 
 from .device_base import TuxBoxBase
@@ -45,7 +45,11 @@ async def disconnect_existing_device(timeout: float = 10.0):
     if a bluetooth manager automatically connects the device. 
     Disconnect via dbus-fast (bleak dep) before the BLE connection attempt
     """
-    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    try:
+        bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    except Exception as exc:
+        logger.warning(f"Could not connect to the system bus: {exc}")
+        return
 
     msg = Message(
         destination="org.bluez",
@@ -65,12 +69,34 @@ async def disconnect_existing_device(timeout: float = 10.0):
     
     connection_path = None
 
-    for path, props in res.body[0].items():
+    # An error reply carries the error string in body[0], not the object dict,
+    # so this must be checked before touching the body. Getting it wrong here
+    # is fatal: the exception escapes into the reconnect loop and BLE never
+    # scans at all (see #53).
+    if res.message_type == MessageType.ERROR:
+        logger.warning(
+            f"BlueZ would not enumerate devices ({res.error_name}); "
+            "skipping the already-connected check"
+        )
+        return
+
+    try:
+        objects = res.body[0].items()
+    except (IndexError, AttributeError):
+        logger.warning("Unexpected reply while enumerating bluetooth devices")
+        return
+
+    for path, props in objects:
         if 'org.bluez.Device1' not in props:
             continue
 
+        # Both properties are optional on the D-Bus interface.
         device_info = props['org.bluez.Device1']
-        if not device_info['Connected'].value or not device_info['Alias'].value.startswith(TOURBOX_NAME_PREFIX):
+        connected = device_info.get('Connected')
+        alias = device_info.get('Alias')
+        if not connected or not connected.value:
+            continue
+        if not alias or not alias.value.startswith(TOURBOX_NAME_PREFIX):
             continue
        
         connection_path = path
@@ -91,7 +117,10 @@ async def disconnect_existing_device(timeout: float = 10.0):
 
     try:
         res = await asyncio.wait_for(bus.call(msg), timeout=timeout)
-        logger.info(f"Disconnected {connection_path}")
+        if res.message_type == MessageType.ERROR:
+            logger.warning(f"Could not disconnect {connection_path}: {res.error_name}")
+        else:
+            logger.info(f"Disconnected {connection_path}")
     except asyncio.TimeoutError:
         logger.warning("Unable to disconnect already connected device")
     except Exception:
