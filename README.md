@@ -243,6 +243,13 @@ sudo udevadm control --reload-rules
 sudo modprobe uinput
 echo "uinput" | sudo tee /etc/modules-load.d/uinput.conf
 
+# 4b. Keep ModemManager off the TourBox serial port (USB connections)
+sudo tee /etc/udev/rules.d/99-tourbox.rules > /dev/null <<'EOF'
+SUBSYSTEM=="tty", ATTRS{idVendor}=="c251", ATTRS{idProduct}=="2005", ENV{ID_MM_DEVICE_IGNORE}="1"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2e3c", ATTRS{idProduct}=="5740", ENV{ID_MM_DEVICE_IGNORE}="1"
+EOF
+sudo udevadm control --reload-rules
+
 # 5. Add user to input group (required for device access)
 sudo usermod -a -G input $USER
 # You'll need to log out and back in for this to take effect
@@ -509,6 +516,35 @@ ls -la /dev/ttyACM*
 # Or set it in your config file (~/.config/tuxbox/config.conf):
 # [device]
 # usb_port = /dev/ttyACM1
+```
+
+### USB device keeps disconnecting and reconnecting
+
+If the device connects but drops after a few button presses with:
+
+```
+Serial read error: device reports readiness to read but returned no data
+(device disconnected or multiple access on port?)
+```
+
+...then another process is reading `/dev/ttyACM0` and stealing bytes from the
+driver. Find out what:
+
+```bash
+# Run while the driver is connected - names every process holding the port
+sudo fuser -v /dev/ttyACM0
+```
+
+The usual culprit is **ModemManager**, which probes CDC-ACM devices with AT
+commands and is pulled in by NetworkManager on most distros. The install script
+adds a udev rule to stop it; if you installed manually, see step 4b above, then
+replug the cable.
+
+The other common cause is running two copies of the driver at once — check for a
+running service before starting one by hand:
+
+```bash
+systemctl --user status tuxbox
 ```
 
 ### "/dev/uinput" cannot be opened for writing

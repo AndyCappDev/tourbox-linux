@@ -1,2 +1,3 @@
 bleak>=0.20.0
 evdev>=1.6.0
+pyserial>=3.5

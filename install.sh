@@ -242,6 +242,40 @@ else
     echo -e "${GREEN}✓${NC} udev rule already exists"
 fi
 
+# Stop ModemManager probing the TourBox serial port
+#
+# The TourBox enumerates as a CDC-ACM device (/dev/ttyACM*). ModemManager,
+# pulled in by NetworkManager on most distros, probes any new CDC-ACM device
+# with AT commands. That fights the driver for the port and shows up as
+# "device reports readiness to read but returned no data (device disconnected
+# or multiple access on port?)" with the device disconnecting in a loop.
+echo ""
+echo "Configuring ModemManager to ignore the TourBox..."
+
+TOURBOX_UDEV_RULE="/etc/udev/rules.d/99-tourbox.rules"
+
+if [ ! -f "$TOURBOX_UDEV_RULE" ]; then
+    # c251:2005 = Elite / Elite Plus. 2e3c:5740 = Neo (a generic ArteryTek
+    # AT32 CDC ID, so this also tells ModemManager to skip other AT32 boards
+    # — harmless, as those are not modems either).
+    sudo tee "$TOURBOX_UDEV_RULE" > /dev/null <<'UDEV_EOF'
+# TourBox controllers - keep ModemManager off the serial port
+SUBSYSTEM=="tty", ATTRS{idVendor}=="c251", ATTRS{idProduct}=="2005", ENV{ID_MM_DEVICE_IGNORE}="1"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2e3c", ATTRS{idProduct}=="5740", ENV{ID_MM_DEVICE_IGNORE}="1"
+UDEV_EOF
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓${NC} Created udev rule to keep ModemManager off the TourBox"
+        sudo udevadm control --reload-rules
+        echo -e "${YELLOW}!${NC} Replug the USB cable for this to take effect"
+    else
+        echo -e "${RED}Error: Failed to create TourBox udev rule${NC}"
+        exit 1
+    fi
+else
+    echo -e "${GREEN}✓${NC} TourBox udev rule already exists"
+fi
+
 # Create and activate virtual environment
 echo ""
 echo "Setting up Python virtual environment..."
