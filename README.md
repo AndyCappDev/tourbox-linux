@@ -100,10 +100,29 @@ Log out and log back in or reboot to activate the driver.
 
 ### Additional Step for KDE Plasma Users
 
-If you're using KDE Plasma on Wayland and want profile mode (app-specific mappings), you need to install `kdotool`:
+If you're using KDE Plasma on Wayland and want profile mode (app-specific mappings), you need to install `kdotool`.
+
+**From your package manager (preferred)**
+
+Some distributions package `kdotool`, which saves installing a Rust toolchain:
 
 ```bash
-# 1. Install build dependencies
+# Fedora
+sudo dnf install kdotool
+
+# NixOS (or Nix on any distro)
+nix-env -iA nixpkgs.kdotool
+
+# Arch (AUR, using your preferred AUR helper)
+yay -S kdotool
+```
+
+**From source**
+
+Debian and Ubuntu do not package `kdotool`, so build it with `cargo`:
+
+```bash
+# 1. Install build dependencies (Debian/Ubuntu package names)
 sudo apt install build-essential pkg-config libdbus-1-dev libxcb1-dev
 
 # 2. Install Rust (if not already installed)
@@ -113,8 +132,13 @@ source $HOME/.cargo/env
 
 # 3. Install kdotool
 cargo install kdotool
+```
 
-# 4. Verify installation
+This installs to `~/.cargo/bin`, so make sure that directory is on your `PATH`.
+
+**Verify**
+
+```bash
 kdotool --version
 ```
 
