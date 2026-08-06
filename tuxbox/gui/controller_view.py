@@ -8,7 +8,7 @@ import logging
 import os
 from xml.etree import ElementTree as ET
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
-from PySide6.QtCore import Signal, Qt, QRectF, QByteArray
+from PySide6.QtCore import Signal, Qt, QRectF, QByteArray, QSize
 from PySide6.QtGui import QPainter
 from PySide6.QtSvgWidgets import QSvgWidget
 from PySide6.QtSvg import QSvgRenderer
@@ -40,7 +40,6 @@ class ControllerView(QWidget):
 
         # SVG rendering widget
         self.svg_widget = SVGControllerWidget(self)
-        self.svg_widget.setMinimumSize(400, 300)
         layout.addWidget(self.svg_widget)
 
     def _load_svg(self):
@@ -103,7 +102,11 @@ class SVGControllerWidget(QWidget):
         self._highlight_renderer = None
         self._svg_data = None
         self._highlighted_control = None
-        self.setMinimumSize(400, 300)
+        self.setMinimumSize(300, 220)
+
+    def sizeHint(self):
+        """Preferred size - the SVG aspect ratio at a comfortable height"""
+        return QSize(469, 410)
 
     def set_svg_data(self, renderer: QSvgRenderer, svg_data: bytes):
         """Set the SVG renderer and raw data"""

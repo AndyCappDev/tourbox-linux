@@ -34,7 +34,11 @@ class TuxBoxConfigWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("TuxBox Configuration")
-        self.setMinimumSize(1000, 980)  # Ensure all controls including profile buttons are fully visible
+        # Keep the minimum small enough to fit short/scaled displays (e.g. a
+        # 1920x1200 panel at 125% scaling leaves only ~926 logical px of height).
+        # An oversized minimum makes Qt clamp the layout and clip the bottom of
+        # the central widget, hiding the profile buttons.
+        self.setMinimumSize(900, 560)
         self.resize(1280, 1024)
 
         # Set window icon
@@ -77,13 +81,13 @@ class TuxBoxConfigWindow(QMainWindow):
 
         # Top left: Controller image
         self.controller_view = ControllerView()
-        self.controller_view.setMinimumSize(400, 410)
-        self.controller_view.setFixedHeight(410)
+        self.controller_view.setMinimumSize(300, 220)
+        self.controller_view.setMaximumHeight(410)  # Preferred height, but allowed to shrink
         left_layout.addWidget(self.controller_view, stretch=0)
 
         # Bottom left: Profiles manager
         self.profile_manager = ProfileManager()
-        self.profile_manager.setMinimumSize(400, 450)
+        self.profile_manager.setMinimumSize(400, 160)
         self.profile_manager.profile_selected.connect(self._on_profile_selected)
         self.profile_manager.profiles_changed.connect(self._on_profiles_changed)
         self.profile_manager.profiles_reset.connect(self._on_profiles_reset)
