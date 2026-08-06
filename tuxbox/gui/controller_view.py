@@ -6,14 +6,50 @@ Displays TourBox Elite image with highlighting for selected controls.
 
 import logging
 import os
+import re
 from xml.etree import ElementTree as ET
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
-from PySide6.QtCore import Signal, Qt, QRectF, QByteArray, QSize
-from PySide6.QtGui import QPainter
+from PySide6.QtCore import Signal, Qt, QRectF, QByteArray, QSize, QEvent
+from PySide6.QtGui import QPainter, QPalette
 from PySide6.QtSvgWidgets import QSvgWidget
 from PySide6.QtSvg import QSvgRenderer
 
+from .theme import is_dark_theme, foreground_hex
+
 logger = logging.getLogger(__name__)
+
+# The artwork is line art drawn in black, which disappears against a dark
+# window background. On dark themes these ink colours are remapped to the
+# palette foreground. The highlight fills (#fff6d5 cream, #00ffff cyan) are
+# deliberately left alone - they are light by design and read well on both.
+_INK_COLOURS = (b'#000000', b'#1a1a1a')
+
+
+def _theme_svg(svg_data: bytes) -> bytes:
+    """Recolour the artwork's black line work to suit the active palette
+
+    Returns the data unchanged on light themes.
+    """
+    if not is_dark_theme():
+        return svg_data
+
+    ink = foreground_hex().encode('ascii')
+
+    for colour in _INK_COLOURS:
+        svg_data = svg_data.replace(b'stroke:' + colour, b'stroke:' + ink)
+        svg_data = svg_data.replace(b'fill:' + colour, b'fill:' + ink)
+
+    # Elements with no fill of their own (the control labels) fall back to
+    # SVG's default of black. Set an inherited default on the root instead;
+    # explicit fills in style="" still win over this presentation attribute.
+    svg_data = re.sub(
+        rb'(<svg\b[^>]*?)(\s*>)',
+        rb'\1 fill="' + ink + rb'"\2',
+        svg_data,
+        count=1,
+    )
+
+    return svg_data
 
 
 class ControllerView(QWidget):
@@ -57,10 +93,10 @@ class ControllerView(QWidget):
 
         # Load SVG data
         with open(self._svg_path, 'rb') as f:
-            self._svg_data = f.read()
+            self._svg_data = _theme_svg(f.read())
 
         # Load SVG renderer
-        self._svg_renderer = QSvgRenderer(self._svg_path)
+        self._svg_renderer = QSvgRenderer(QByteArray(self._svg_data))
         if not self._svg_renderer.isValid():
             logger.error(f"Invalid SVG file: {self._svg_path}")
             self._svg_renderer = None
@@ -69,6 +105,16 @@ class ControllerView(QWidget):
         # Pass renderer and data to the widget
         self.svg_widget.set_svg_data(self._svg_renderer, self._svg_data)
         logger.info(f"Loaded SVG from: {self._svg_path}")
+
+    def changeEvent(self, event):
+        """Re-theme the artwork when the application palette changes"""
+        if event.type() in (QEvent.PaletteChange, QEvent.ApplicationPaletteChange):
+            self._load_svg()
+            # Rebuild the highlight against the newly themed artwork
+            self.svg_widget.set_highlighted_control(
+                self._current_control, self._current_is_modifier, self._combo_control
+            )
+        super().changeEvent(event)
 
     def highlight_control(self, control_name: str, is_modifier: bool = False, combo_control: str = None):
         """Highlight a specific control on the image
@@ -285,7 +331,8 @@ class SVGControllerWidget(QWidget):
         if not self._base_renderer:
             # Show placeholder if no SVG loaded
             painter = QPainter(self)
-            painter.fillRect(self.rect(), Qt.lightGray)
+            painter.fillRect(self.rect(), self.palette().color(QPalette.Base))
+            painter.setPen(self.palette().color(QPalette.WindowText))
             painter.drawText(
                 self.rect(),
                 Qt.AlignCenter,

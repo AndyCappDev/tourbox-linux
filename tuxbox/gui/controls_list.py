@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QHeaderView, QLabel
 )
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QBrush, QColor
 from evdev import ecodes as e
 
 # Import from existing driver code
@@ -129,7 +128,6 @@ class ControlsList(QWidget):
             name_item.setData(Qt.UserRole, control_name)  # Store internal name
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
             name_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            name_item.setForeground(QBrush(QColor(0, 0, 0)))  # Black text
             self.table.setItem(row, 0, name_item)
 
             # Current action column
@@ -145,8 +143,6 @@ class ControlsList(QWidget):
             action_item = QTableWidgetItem(action_text)
             action_item.setFlags(action_item.flags() & ~Qt.ItemIsEditable)
             action_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            # Explicitly set foreground color to ensure visibility
-            action_item.setForeground(QBrush(QColor(0, 0, 0)))  # Black text
             self.table.setItem(row, 1, action_item)
 
             # Comment column
@@ -154,7 +150,6 @@ class ControlsList(QWidget):
             comment_item = QTableWidgetItem(comment_text)
             comment_item.setFlags(comment_item.flags() & ~Qt.ItemIsEditable)
             comment_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            comment_item.setForeground(QBrush(QColor(0, 0, 0)))  # Black text
             self.table.setItem(row, 2, comment_item)
 
             # Verify it was set

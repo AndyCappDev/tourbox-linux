@@ -17,6 +17,7 @@ from PySide6.QtGui import QFont
 # Import from existing driver code
 from tuxbox.config_loader import Profile
 from tuxbox.window_monitor import WindowMonitor, WindowInfo
+from tuxbox.gui.theme import muted_label_style
 from tuxbox.haptic import HapticStrength, HapticSpeed
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ class ProfileSettingsDialog(QDialog):
             self.name_edit.setEnabled(False)
             name_layout.addRow("Name:", self.name_edit)
             info_label = QLabel("(default profile cannot be renamed)")
-            info_label.setStyleSheet("color: #666; font-size: 10px;")
+            info_label.setStyleSheet(muted_label_style(10))
             name_layout.addRow("", info_label)
         else:
             name_layout.addRow("Name:", self.name_edit)
@@ -77,7 +78,7 @@ class ProfileSettingsDialog(QDialog):
             "Leave both empty to disable auto-activation (default profile will be used instead)."
         )
         info_label.setWordWrap(True)
-        info_label.setStyleSheet("color: #666; font-size: 10px;")
+        info_label.setStyleSheet(muted_label_style(10))
         matching_layout.addRow(info_label)
 
         self.app_id_edit = QLineEdit(self.profile.app_id or "")
@@ -133,7 +134,7 @@ class ProfileSettingsDialog(QDialog):
             "Only available on TourBox Elite. Neo models do not have haptic motors."
         )
         haptic_info.setWordWrap(True)
-        haptic_info.setStyleSheet("color: #666; font-size: 10px;")
+        haptic_info.setStyleSheet(muted_label_style(10))
         haptic_layout.addRow("", haptic_info)
 
         layout.addWidget(haptic_group)
@@ -178,7 +179,7 @@ class ProfileSettingsDialog(QDialog):
             "Longer = more forgiving, easier to hit."
         )
         double_click_info.setWordWrap(True)
-        double_click_info.setStyleSheet("color: #666; font-size: 10px;")
+        double_click_info.setStyleSheet(muted_label_style(10))
         double_click_layout.addRow("", double_click_info)
 
         layout.addWidget(double_click_group)
@@ -221,7 +222,7 @@ class ProfileSettingsDialog(QDialog):
             "When unchecked, uses the global setting from config.conf [device] section."
         )
         modifier_delay_info.setWordWrap(True)
-        modifier_delay_info.setStyleSheet("color: #666; font-size: 10px;")
+        modifier_delay_info.setStyleSheet(muted_label_style(10))
         modifier_delay_layout.addRow("", modifier_delay_info)
 
         layout.addWidget(modifier_delay_group)

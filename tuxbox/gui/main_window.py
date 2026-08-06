@@ -5,7 +5,8 @@ import sys
 import logging
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QSplitter, QMessageBox, QDialog, QProgressDialog, QToolBar
+    QLabel, QSplitter, QMessageBox, QDialog, QProgressDialog, QToolBar,
+    QScrollArea, QFrame
 )
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QKeySequence, QIcon, QDesktopServices, QFontMetrics
@@ -119,7 +120,16 @@ class TuxBoxConfigWindow(QMainWindow):
         self.control_editor.on_release_changed.connect(self._on_on_release_changed)
         right_layout.addWidget(self.control_editor, stretch=0)
 
-        main_splitter.addWidget(right_widget)
+        # The control editor has a tall stack of fixed-height rows and cannot
+        # compress indefinitely. On short windows let the column scroll rather
+        # than letting its rows overlap each other.
+        right_scroll = QScrollArea()
+        right_scroll.setWidget(right_widget)
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QFrame.NoFrame)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        main_splitter.addWidget(right_scroll)
 
         # Set initial splitter sizes (40% left, 60% right)
         main_splitter.setSizes([400, 600])
