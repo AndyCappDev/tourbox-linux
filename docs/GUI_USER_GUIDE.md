@@ -342,7 +342,7 @@ Both match VS Code windows. "VS Code" wins because it sorts before "VS Code Dev"
 
 When the TuxBox driver is running:
 
-- The driver monitors the active window every 200ms
+- The driver monitors the active window (immediately on KDE Plasma, otherwise every 0.2s by default)
 - Compares window properties against all **active** profile rules
 - Switches to the first matching profile (alphabetically if multiple match)
 - Falls back to default if no match

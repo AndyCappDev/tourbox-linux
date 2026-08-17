@@ -118,6 +118,7 @@ Configures your TourBox device connection.
 **Available settings:**
 - `mac_address` - Your TourBox's Bluetooth MAC address (XX:XX:XX:XX:XX:XX) - Elite/Elite Plus only
 - `modifier_delay` - Milliseconds to wait between modifier keys (Ctrl/Shift/Alt/Meta) and other **keyboard** keys when sending key combinations. Default: `0` (disabled). Set to `20`-`50` if apps like GIMP don't recognize keyboard combos. Can be overridden per-profile in `.profile` files (see below). **Note:** modifier+mouse combos (e.g. Alt+scroll, Ctrl+click) get a small built-in delay automatically and do not require this setting.
+- `window_poll_interval` - Seconds between active-window checks for app-specific profile switching. Default: `0.2`. Range: `0.2`-`60`. **Not used on KDE Plasma**, which receives window changes as they happen. See [Window Detection](#window-detection) below.
 
 **How to find your MAC address:**
 ```bash
@@ -308,7 +309,7 @@ scroll_down = REL_WHEEL:-1
 
 **How it works:**
 1. Driver starts with `default` profile
-2. Window monitor checks focused window every 200ms
+2. Window monitor watches the focused window (see [Window Detection](#window-detection))
 3. When window changes, driver looks for matching profile
 4. If match found, **instantly switches** button mappings
 5. Console shows: `Switched to profile: vscode`
@@ -485,6 +486,54 @@ modifier_delay = 30
 - **Set to `30`** in profile: Uses 30ms delay regardless of global setting
 
 **Recommended values:** `20`-`50`ms. Start with `30` and adjust if needed.
+
+---
+
+## Window Detection
+
+App-specific profiles need to know which window has focus. How TuxBox finds out depends on your desktop.
+
+### KDE Plasma: pushed by KWin (no polling)
+
+On KDE, TuxBox loads a small script into KWin once at startup. KWin then **pushes** focus and title changes to the driver as they happen. This means:
+
+- Profile switches apply in roughly **15ms**
+- **Zero** cost while you aren't switching windows - no background D-Bus traffic at all
+- `window_poll_interval` is ignored
+
+You'll see this in the log when it's working:
+
+```
+Starting window monitor for profile switching
+KDE event-driven window monitoring active (no polling)
+```
+
+If the script can't be set up, TuxBox logs a warning and falls back to polling automatically:
+
+```
+KDE event monitoring unavailable - falling back to polling
+Starting window monitor (compositor: kde, interval: 0.2s)
+```
+
+That fallback happens if KWin refuses to load or start the script, no events arrive within a few seconds, or another TuxBox instance already holds the driver's D-Bus name. Profile switching keeps working either way.
+
+> **`kdotool` is still required on KDE**, even though the event-driven path doesn't use it to read windows: TuxBox uses it to detect that you're running KWin in the first place. Without it, KDE isn't recognized and app-specific profiles won't switch at all.
+
+### Other desktops: polling
+
+On GNOME, Sway, Hyprland, Niri, Mango and X11, TuxBox checks the focused window on a timer using a helper tool (`xdotool` on X11, `swaymsg` on Sway, and so on).
+
+`window_poll_interval` is the time between checks, and therefore the **worst-case delay** before a profile switch takes effect:
+
+```ini
+[device]
+window_poll_interval = 0.2
+```
+
+- **Lower** (minimum `0.2`) - switches feel snappier, more helper processes spawned
+- **Higher** (maximum `60`) - quieter system, longer delay before a profile applies
+
+Most people should leave this alone. Raise it if you're on a busy system and want to cut background work; the trade-off is that a profile may take up to that long to switch after you focus an app.
 
 ---
 
@@ -781,9 +830,9 @@ python3 -m tuxbox.window_monitor
 
 #### Profile switching is slow
 
-- Normal delay is 200ms (5 times per second)
-- This is intentional to avoid excessive switching
-- Profile switches are **instant** once detected
+- On **KDE Plasma**, switches should be near-instant (~15ms). If they feel slow, check the log for `falling back to polling` - see [Window Detection](#window-detection)
+- On other desktops, the delay is up to `window_poll_interval` (default `0.2` seconds). Lower it if you want snappier switching
+- Profile switches are **instant** once detected - the delay is in noticing the window change, not in applying the mappings
 
 ---
 
