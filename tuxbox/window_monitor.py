@@ -83,14 +83,23 @@ function onActivated(window) {
     report(window);
 }
 
+var connected = false;
 if (workspace.windowActivated) {
     workspace.windowActivated.connect(onActivated);          // Plasma 6
+    connected = true;
 } else if (workspace.clientActivated) {
     workspace.clientActivated.connect(onActivated);          // Plasma 5
+    connected = true;
 }
 
-// Report the current window immediately - this doubles as the handshake that
-// tells the driver the script loaded and D-Bus callbacks are working.
+// Handshake. Sent unconditionally and before any window report, so it works
+// even when nothing is focused yet (the driver starts with the session). The
+// flag tells the driver whether an activation signal was actually connected -
+// without it, a KWin whose API we don't recognise would look healthy while
+// never sending another event.
+callDBus("%(name)s", "/", "%(iface)s", "ready", connected);
+
+// Then report the currently focused window, if there is one
 onActivated(workspace.activeWindow || workspace.activeClient);
 """
 
@@ -113,6 +122,9 @@ class WindowMonitor:
         self.compositor = None
         self.last_window = None
         self._kwin_script_path = None
+        # None until the first query verifies the tool's chained output, then
+        # True/False for the rest of the session
+        self._supports_chaining = None
         self._kdotool_path = self._find_kdotool()
         self._detect_compositor()
 
@@ -480,22 +492,108 @@ class WindowMonitor:
             return None
 
         try:
-            # Chained getters: one line of output per getter, in order
-            result = subprocess.run(
-                [self._kdotool_path, 'getactivewindow',
-                 'getwindowclassname', 'getwindowname'],
-                capture_output=True,
-                text=True,
-                timeout=1
-            )
-
-            if result.returncode == 0:
-                return self._parse_chained_output(result.stdout)
-
+            return self._query_window_tool([self._kdotool_path])
         except Exception as e:
             logger.debug(f"KDE window detection error: {e}")
 
         return None
+
+    def _query_window_tool(self, base_argv) -> Optional[WindowInfo]:
+        """Ask an xdotool-compatible tool for the active window's class and title
+
+        Prefers a single chained invocation, which halves the process spawns.
+        Not every version of every tool chains two getters the same way, so the
+        first successful query verifies the chained result against separate
+        calls and permanently falls back to those if they disagree. Detection
+        therefore never becomes less reliable than the one-call-per-getter form.
+        """
+        if self._supports_chaining is None:
+            return self._verify_chaining(base_argv)
+
+        if self._supports_chaining:
+            window = self._query_window_tool_chained(base_argv)
+            if window:
+                return window
+            # Nothing from the chained call. Expected when no window is focused,
+            # so only blame chaining if separate calls do better.
+            window = self._query_window_tool_split(base_argv)
+            if window:
+                self._disable_chaining(base_argv, "chained call returned nothing")
+            return window
+
+        return self._query_window_tool_split(base_argv)
+
+    def _verify_chaining(self, base_argv) -> Optional[WindowInfo]:
+        """Decide once whether this tool's chained output can be trusted
+
+        Runs both forms and compares. Anything other than an exact match - a
+        tool that rejects the chain, prints only the last getter, or prints them
+        in a different order - disables chaining for the rest of the session.
+        """
+        chained = self._query_window_tool_chained(base_argv)
+        split = self._query_window_tool_split(base_argv)
+
+        # No focused window: nothing to compare yet, try again on the next call
+        if split is None:
+            return None
+
+        if chained == split:
+            self._supports_chaining = True
+            logger.debug(
+                f"{os.path.basename(base_argv[0])} chained getters verified"
+            )
+        else:
+            self._disable_chaining(
+                base_argv, f"chained result {chained} != {split}"
+            )
+
+        return split
+
+    def _disable_chaining(self, base_argv, reason: str):
+        """Stop using chained getters for this session"""
+        self._supports_chaining = False
+        logger.info(
+            f"{os.path.basename(base_argv[0])} does not support chained getters "
+            "- using one call per getter"
+        )
+        logger.debug(f"Chaining disabled: {reason}")
+
+    def _query_window_tool_chained(self, base_argv) -> Optional[WindowInfo]:
+        """Fetch class and title in a single invocation"""
+        result = subprocess.run(
+            base_argv + ['getactivewindow', 'getwindowclassname', 'getwindowname'],
+            capture_output=True, text=True, timeout=1
+        )
+        if result.returncode != 0:
+            return None
+        return self._parse_chained_output(result.stdout)
+
+    def _query_window_tool_split(self, base_argv) -> Optional[WindowInfo]:
+        """Fetch class and title with one call each (pre-chaining behaviour)"""
+        class_result = subprocess.run(
+            base_argv + ['getactivewindow', 'getwindowclassname'],
+            capture_output=True, text=True, timeout=1
+        )
+        title_result = subprocess.run(
+            base_argv + ['getactivewindow', 'getwindowname'],
+            capture_output=True, text=True, timeout=1
+        )
+
+        # Either one succeeding is enough to identify the window
+        if class_result.returncode != 0 and title_result.returncode != 0:
+            return None
+
+        window_class = class_result.stdout.strip() if class_result.returncode == 0 else ''
+        window_title = title_result.stdout.strip() if title_result.returncode == 0 else ''
+
+        if not window_class and not window_title:
+            return None
+
+        return WindowInfo(
+            app_id=window_class,
+            title=window_title,
+            wm_class=window_class
+        )
 
     @staticmethod
     def _parse_chained_output(stdout: str) -> Optional[WindowInfo]:
@@ -523,18 +621,7 @@ class WindowMonitor:
         Requires: xdotool (available in most distro repositories)
         """
         try:
-            # Chained getters - one subprocess instead of two
-            result = subprocess.run(
-                ['xdotool', 'getactivewindow',
-                 'getwindowclassname', 'getwindowname'],
-                capture_output=True,
-                text=True,
-                timeout=1
-            )
-
-            if result.returncode == 0:
-                return self._parse_chained_output(result.stdout)
-
+            return self._query_window_tool(['xdotool'])
         except Exception as e:
             logger.debug(f"X11 window detection error: {e}")
 
@@ -561,12 +648,18 @@ class WindowMonitor:
             return False
 
         queue: asyncio.Queue = asyncio.Queue()
+        ready = asyncio.get_running_loop().create_future()
 
         class _Receiver(ServiceInterface):
-            """Receives windowChanged calls from the KWin script"""
+            """Receives handshake and windowChanged calls from the KWin script"""
 
             def __init__(self):
                 super().__init__(KDE_DBUS_INTERFACE)
+
+            @method(name='ready')
+            def script_ready(self, signal_connected: 'b'):
+                if not ready.done():
+                    ready.set_result(signal_connected)
 
             @method(name='windowChanged')
             def window_changed(self, window_class: 's', title: 's'):
@@ -591,21 +684,30 @@ class WindowMonitor:
             if not script_loaded:
                 return False
 
-            # Handshake: the script reports the current window on load. If that
-            # never arrives, callbacks are not reaching us - use polling instead.
+            # Handshake. Proves two things before we commit to event mode:
+            # that D-Bus callbacks reach us at all, and that the script found an
+            # activation signal to connect to. Without the second check a KWin
+            # with an unrecognised API would look healthy while silently never
+            # reporting another window change.
             try:
-                first = await asyncio.wait_for(
-                    queue.get(), timeout=KDE_EVENT_HANDSHAKE_TIMEOUT
+                signal_connected = await asyncio.wait_for(
+                    ready, timeout=KDE_EVENT_HANDSHAKE_TIMEOUT
                 )
             except asyncio.TimeoutError:
                 logger.warning(
-                    "KWin script loaded but sent no events "
+                    "KWin script loaded but did not call back "
                     f"within {KDE_EVENT_HANDSHAKE_TIMEOUT}s"
                 )
                 return False
 
+            if not signal_connected:
+                logger.warning(
+                    "KWin exposes no window-activation signal "
+                    "(unsupported Plasma version?)"
+                )
+                return False
+
             logger.info("KDE event-driven window monitoring active (no polling)")
-            await self._dispatch_kde_event(first, callback)
 
             while True:
                 await self._dispatch_kde_event(await queue.get(), callback)
