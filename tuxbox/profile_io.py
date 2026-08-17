@@ -949,6 +949,13 @@ def _write_device_config(filepath: Path, device_config: Dict) -> bool:
             value = 'true' if device_config['force_haptics'] else 'false'
             lines.append(f"force_haptics = {value}")
 
+        # Preserve tuning settings so migration does not silently reset them
+        if 'modifier_delay' in device_config:
+            lines.append(f"modifier_delay = {device_config['modifier_delay']}")
+
+        if 'window_poll_interval' in device_config:
+            lines.append(f"window_poll_interval = {device_config['window_poll_interval']}")
+
         lines.append("")
 
         # Write atomically

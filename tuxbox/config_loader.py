@@ -16,6 +16,11 @@ from dataclasses import dataclass, field
 from evdev import ecodes as e
 
 from .haptic import HapticConfig, HapticStrength, HapticSpeed
+from .window_monitor import (
+    DEFAULT_POLL_INTERVAL,
+    MIN_POLL_INTERVAL,
+    MAX_POLL_INTERVAL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -359,6 +364,25 @@ def load_device_config(config_path: str = None) -> Dict[str, str]:
             except ValueError:
                 logger.warning(f"Invalid modifier_delay value, using default 0")
                 device_config['modifier_delay'] = 0
+        if 'window_poll_interval' in config['device']:
+            # Parse float value (seconds) - how often the active window is checked
+            # for profile switching. Raise this to reduce D-Bus/subprocess load.
+            raw = config['device']['window_poll_interval'].strip()
+            try:
+                interval = float(raw)
+            except ValueError:
+                logger.warning(
+                    f"Invalid window_poll_interval '{raw}', "
+                    f"using default {DEFAULT_POLL_INTERVAL}s"
+                )
+            else:
+                clamped = max(MIN_POLL_INTERVAL, min(MAX_POLL_INTERVAL, interval))
+                if clamped != interval:
+                    logger.warning(
+                        f"window_poll_interval {interval}s out of range "
+                        f"({MIN_POLL_INTERVAL}-{MAX_POLL_INTERVAL}s), clamped to {clamped}s"
+                    )
+                device_config['window_poll_interval'] = clamped
 
     return device_config
 

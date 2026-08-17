@@ -331,7 +331,9 @@ class TuxBoxUSB(TuxBoxBase):
         if self.use_profiles and self.window_monitor and self.window_monitor.compositor:
             logger.info("Starting window monitor for profile switching")
             monitor_task = asyncio.create_task(
-                self.window_monitor.monitor_window_changes(self.on_window_change, interval=0.2)
+                self.window_monitor.monitor_window_changes(
+                    self.on_window_change, interval=self.window_poll_interval
+                )
             )
 
         # Connection loop with automatic reconnection

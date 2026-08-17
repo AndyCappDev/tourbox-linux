@@ -17,7 +17,7 @@ from typing import Optional, Dict, Set, List, Tuple
 
 from evdev import UInput, ecodes as e
 from .config_loader import load_profiles, load_device_config, BUTTON_CODES, parse_action
-from .window_monitor import WindowMonitor
+from .window_monitor import WindowMonitor, DEFAULT_POLL_INTERVAL
 
 # Keyboard modifier keys - these need to be sent before main keys for proper combo recognition
 KEYBOARD_MODIFIER_KEYS = {
@@ -144,6 +144,12 @@ class TuxBoxBase(ABC):
         self.modifier_delay = self._global_modifier_delay
         if self.modifier_delay > 0:
             logger.info(f"Global modifier delay enabled: {self.modifier_delay}ms")
+
+        # How often the active window is polled for profile switching.
+        # Configurable via [device] window_poll_interval in config.conf.
+        self.window_poll_interval = device_config.get(
+            'window_poll_interval', DEFAULT_POLL_INTERVAL
+        )
 
     def is_modifier_button(self, control_name: str) -> bool:
         """Check if a control is configured as a modifier button
