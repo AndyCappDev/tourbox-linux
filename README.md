@@ -85,11 +85,23 @@ The driver **auto-detects** everything:
 
 ### Run the Installer
 
+If you don't already have `git`, install it first:
+
+```bash
+sudo apt install git      # Debian/Ubuntu/Mint
+sudo dnf install git      # Fedora/RHEL
+sudo pacman -S git        # Arch
+```
+
+Then run each of these as its own command, exactly as written:
+
 ```bash
 git clone https://github.com/AndyCappDev/tuxbox.git
 cd tuxbox
 ./install.sh
 ```
+
+> **New to Linux?** Don't put `sudo apt install` in front of these three lines. `apt install` installs software from your distribution's repositories, while `git clone` downloads this project. Prefixing the clone command makes apt look for packages named `clone` and `https://github.com/AndyCappDev`, which fails with `E: Unable to locate package clone`.
 
 The installer will:
 1. Create a Python virtual environment
