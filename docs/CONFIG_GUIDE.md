@@ -116,6 +116,7 @@ Configures your TourBox device connection.
 **Format:** `setting = value`
 
 **Available settings:**
+- `connection` - Which transports the driver may use: `auto` (default), `usb`, or `ble`. See [Choosing a connection](#choosing-a-connection) below.
 - `mac_address` - Your TourBox's Bluetooth MAC address (XX:XX:XX:XX:XX:XX) - Elite/Elite Plus only
 - `modifier_delay` - Milliseconds to wait between modifier keys (Ctrl/Shift/Alt/Meta) and other **keyboard** keys when sending key combinations. Default: `0` (disabled). Set to `20`-`50` if apps like GIMP don't recognize keyboard combos. Can be overridden per-profile in `.profile` files (see below). **Note:** modifier+mouse combos (e.g. Alt+scroll, Ctrl+click) get a small built-in delay automatically and do not require this setting.
 - `window_poll_interval` - Seconds between active-window checks for app-specific profile switching. Default: `0.2`. Range: `0.2`-`60`. **Not used on KDE Plasma**, which receives window changes as they happen. See [Window Detection](#window-detection) below.
@@ -132,6 +133,28 @@ Look for "TourBox Elite" or "TourBox Elite Plus" in the output.
 mac_address = D9:BE:1E:CC:40:D7
 modifier_delay = 0
 ```
+
+#### Choosing a connection
+
+By default the driver uses whichever transport it finds:
+
+| `connection` | Behaviour |
+|--------------|-----------|
+| `auto` (default) | Uses USB if the TourBox is plugged in, otherwise falls back to Bluetooth. Keeps watching for the USB cable and switches over as soon as it appears. |
+| `usb` | USB only - Bluetooth is never scanned. The driver waits for the cable if the device isn't connected yet. |
+| `ble` | Bluetooth only - `/dev/ttyACM*` is never probed. |
+
+Set `connection = usb` if you always use the cable. In `auto` mode, a driver
+that can't find the TourBox on USB keeps scanning over Bluetooth for as long as
+it's running, which needlessly wakes the Bluetooth radio - worth avoiding on a
+laptop running on battery.
+
+```ini
+[device]
+connection = usb
+```
+
+The `--usb` and `--ble` command line flags override this setting.
 
 ### `[service]` Section (Optional)
 

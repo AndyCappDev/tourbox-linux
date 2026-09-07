@@ -38,11 +38,26 @@ UNLOCK_COMMAND = bytes.fromhex("5500078894001afe")
 # Device name prefix for scanning
 TOURBOX_NAME_PREFIX = "TourBox"
 
+# Reconnect backoff. Each failed attempt already costs a ~10s radio scan, so a
+# short fixed retry keeps the adapter busy roughly half the time for as long as
+# the TourBox stays off - noticeable on a laptop battery. The first few retries
+# stay quick (device powered on mid-session is picked up promptly), then the
+# delay grows towards RECONNECT_DELAY_MAX and idles there. Reset on a
+# successful connection.
+RECONNECT_DELAY_INITIAL = 5.0
+RECONNECT_DELAY_MAX = 60.0
+RECONNECT_BACKOFF_FACTOR = 1.5
+
+# How long a single sleep inside the backoff wait lasts. The wait is sliced so
+# shutdown (and the supervisor's switch to USB) is noticed promptly even when
+# the backoff has grown to a minute.
+RECONNECT_WAIT_SLICE = 0.5
+
 
 async def disconnect_existing_device(timeout: float = 10.0):
     """
-    Bleak cant detect already connected devices causing a poor user experience 
-    if a bluetooth manager automatically connects the device. 
+    Bleak cant detect already connected devices causing a poor user experience
+    if a bluetooth manager automatically connects the device.
     Disconnect via dbus-fast (bleak dep) before the BLE connection attempt
     """
     try:
@@ -51,6 +66,21 @@ async def disconnect_existing_device(timeout: float = 10.0):
         logger.warning(f"Could not connect to the system bus: {exc}")
         return
 
+    # Every exit path below has to close this bus. The reconnect loop calls this
+    # once per scan, so a bus left open leaks a system D-Bus connection every few
+    # seconds; with no TourBox present that eventually hits
+    # max_connections_per_user and breaks D-Bus session-wide (see #57).
+    try:
+        await _disconnect_existing_device(bus, timeout)
+    finally:
+        try:
+            bus.disconnect()
+        except Exception:
+            logger.debug("Error closing the system bus", exc_info=True)
+
+
+async def _disconnect_existing_device(bus, timeout: float):
+    """Ask BlueZ to disconnect an already-connected TourBox, if there is one"""
     msg = Message(
         destination="org.bluez",
         path="/",
@@ -63,10 +93,10 @@ async def disconnect_existing_device(timeout: float = 10.0):
     except asyncio.TimeoutError:
         logger.warning("Timeout while enumerating bluetooth devices")
         return
-    except Exception:
-        logger.warning("Error while enumerating bluetooth devices")
+    except Exception as exc:
+        logger.warning(f"Error while enumerating bluetooth devices: {exc}")
         return
-    
+
     connection_path = None
 
     # An error reply carries the error string in body[0], not the object dict,
@@ -123,9 +153,8 @@ async def disconnect_existing_device(timeout: float = 10.0):
             logger.info(f"Disconnected {connection_path}")
     except asyncio.TimeoutError:
         logger.warning("Unable to disconnect already connected device")
-    except Exception:
-        logger.warning("Error while disconnecting bluetooth device")
-        return
+    except Exception as exc:
+        logger.warning(f"Error while disconnecting bluetooth device: {exc}")
 
 
 async def scan_for_tuxbox(timeout: float = 10.0) -> Optional[BLEDevice]:
@@ -193,7 +222,7 @@ class TuxBoxBLE(TuxBoxBase):
         self.device: Optional[BLEDevice] = None  # Discovered device from scanning
         self.client: Optional[BleakClient] = None
         self.disconnected = False
-        self.reconnect_delay = 5.0  # Initial reconnection delay in seconds
+        self.reconnect_delay = RECONNECT_DELAY_INITIAL
 
     def disconnection_handler(self, client):
         """Handle disconnection from TourBox Elite"""
@@ -320,7 +349,7 @@ class TuxBoxBLE(TuxBoxBase):
                 print("Press Ctrl+C to exit")
 
                 # Reset reconnect delay on successful connection
-                self.reconnect_delay = 5.0
+                self.reconnect_delay = RECONNECT_DELAY_INITIAL
 
                 # Keep running until disconnected or killed
                 while not self.killer.kill_now and not self.disconnected:
@@ -348,6 +377,20 @@ class TuxBoxBLE(TuxBoxBase):
             logger.error(f"Connection error: {ex}")
             print(f"Connection error: {ex}")
             return True  # Retry
+
+    async def wait_before_reconnect(self, delay: float):
+        """Sleep between connection attempts, giving up early on shutdown
+
+        Slept in short slices rather than one long sleep: the backoff can reach
+        a minute, and a plain sleep that long would delay service shutdown and
+        the supervisor's switch to USB by the whole remaining delay.
+        """
+        deadline = asyncio.get_event_loop().time() + delay
+        while not self.killer.kill_now:
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                return
+            await asyncio.sleep(min(remaining, RECONNECT_WAIT_SLICE))
 
     async def start(self):
         """Start the TourBox BLE driver with automatic reconnection"""
@@ -427,11 +470,14 @@ class TuxBoxBLE(TuxBoxBase):
 
                 # Wait before reconnecting with exponential backoff
                 if not self.killer.kill_now:
-                    delay = min(self.reconnect_delay, 10.0)  # Cap at 10 seconds
-                    logger.info(f"Attempting to reconnect in {delay} seconds...")
-                    print(f"Reconnecting in {delay} seconds...")
-                    await asyncio.sleep(delay)
-                    self.reconnect_delay = min(self.reconnect_delay * 1.5, 10.0)
+                    delay = min(self.reconnect_delay, RECONNECT_DELAY_MAX)
+                    logger.info(f"Attempting to reconnect in {delay:.0f} seconds...")
+                    print(f"Reconnecting in {delay:.0f} seconds...")
+                    await self.wait_before_reconnect(delay)
+                    self.reconnect_delay = min(
+                        self.reconnect_delay * RECONNECT_BACKOFF_FACTOR,
+                        RECONNECT_DELAY_MAX,
+                    )
         except KeyboardInterrupt:
             pass
         finally:

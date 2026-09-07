@@ -24,7 +24,7 @@ try:
 except ImportError:
     # Fallback for broken editable installs (e.g. Python 3.14 + legacy setuptools)
     VERSION = "unknown"
-from .config_loader import load_device_config
+from .config_loader import load_device_config, DEFAULT_CONNECTION_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -285,6 +285,40 @@ async def _wait_for_ble_to_stop(ble_task):
             pass
 
 
+async def usb_only_loop(args, configured_usb_port):
+    """Wait for a USB TourBox and run it, never touching Bluetooth.
+
+    Used by `connection = usb`. Unlike --usb this does not give up when no
+    device is present: as a user service the driver typically starts before
+    the cable is plugged in (or before the device is switched on), so it
+    rescans until a TourBox shows up. Rescanning is a cheap /dev/ttyACM* glob,
+    with no radio activity - the point of the setting on a laptop.
+    """
+    from .device_usb import TuxBoxUSB
+
+    waiting_logged = False
+
+    while True:
+        usb_port = find_tuxbox_usb_port(configured_usb_port)
+
+        if usb_port:
+            logger.info(f"Found TourBox at {usb_port}")
+            print(f"Found TourBox on USB ({usb_port})")
+            await TuxBoxUSB(port=usb_port, config_path=args.config).start()
+            return
+
+        # Only announced once - this loop ticks every few seconds.
+        if not waiting_logged:
+            logger.info(
+                "No TourBox USB device found; waiting for one "
+                "(Bluetooth disabled by connection = usb)"
+            )
+            print("Waiting for a TourBox on USB (Bluetooth disabled)...")
+            waiting_logged = True
+
+        await asyncio.sleep(USB_RESCAN_INTERVAL)
+
+
 async def auto_detect_loop(args, configured_usb_port):
     """Auto-detect transport with USB hot-plug awareness.
 
@@ -380,10 +414,14 @@ def main():
     # Determine USB port
     usb_port = args.port or device_config.get('usb_port', DEFAULT_USB_PORT)
 
-    # Determine connection mode
+    # Determine connection mode. Command line flags win over the config file.
     if args.usb and args.ble:
         print("Error: Cannot specify both --usb and --ble")
         sys.exit(1)
+
+    connection = device_config.get('connection', DEFAULT_CONNECTION_MODE)
+    if not args.usb and not args.ble and connection != DEFAULT_CONNECTION_MODE:
+        logger.info(f"Connection mode '{connection}' set in config")
 
     try:
         if args.usb:
@@ -408,10 +446,17 @@ def main():
 
             asyncio.run(TuxBoxUSB(port=usb_port, config_path=args.config).start())
 
-        elif args.ble:
-            logger.info("BLE mode forced via --ble flag")
+        elif args.ble or connection == 'ble':
+            if args.ble:
+                logger.info("BLE mode forced via --ble flag")
             from .device_ble import TuxBoxBLE
             asyncio.run(TuxBoxBLE(config_path=args.config).start())
+
+        elif connection == 'usb':
+            # USB only. Waits for the device rather than exiting when it is
+            # absent, so the service survives a login with nothing plugged in.
+            print("Scanning for TourBox on USB...")
+            asyncio.run(usb_only_loop(args, usb_port))
 
         else:
             # Auto-detect with USB hot-plug awareness. The supervisor stays

@@ -24,6 +24,13 @@ from .window_monitor import (
 
 logger = logging.getLogger(__name__)
 
+# Transports the driver may use, set with `connection` in the [device] section.
+#   auto - USB if present, otherwise Bluetooth (with USB hot-plug promotion)
+#   usb  - USB only; the Bluetooth radio is never touched
+#   ble  - Bluetooth only; /dev/ttyACM* is never probed
+VALID_CONNECTION_MODES = frozenset(('auto', 'usb', 'ble'))
+DEFAULT_CONNECTION_MODE = 'auto'
+
 
 @dataclass
 class Profile:
@@ -348,6 +355,19 @@ def load_device_config(config_path: str = None) -> Dict[str, str]:
     device_config = {}
 
     if 'device' in config:
+        if 'connection' in config['device']:
+            # Which transports the driver is allowed to use. 'usb' keeps the
+            # Bluetooth radio out of it entirely, which matters on a laptop:
+            # with no TourBox present the BLE path otherwise scans forever.
+            raw = config['device']['connection'].strip().lower()
+            if raw in VALID_CONNECTION_MODES:
+                device_config['connection'] = raw
+            else:
+                logger.warning(
+                    f"Invalid connection mode '{raw}' "
+                    f"(expected one of {', '.join(sorted(VALID_CONNECTION_MODES))}), "
+                    f"using default '{DEFAULT_CONNECTION_MODE}'"
+                )
         if 'mac_address' in config['device']:
             device_config['mac_address'] = config['device']['mac_address'].strip()
         if 'usb_port' in config['device']:

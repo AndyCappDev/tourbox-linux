@@ -939,6 +939,9 @@ def _write_device_config(filepath: Path, device_config: Dict) -> bool:
         lines.append("")
         lines.append("[device]")
 
+        if 'connection' in device_config:
+            lines.append(f"connection = {device_config['connection']}")
+
         if 'mac_address' in device_config:
             lines.append(f"mac_address = {device_config['mac_address']}")
 
