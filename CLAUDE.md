@@ -68,6 +68,8 @@ TuxBoxBase (device_base.py)     - Abstract base with shared logic
 - `control_editor.py` - Key capture and mapping editor
 - `controller_view.py` - SVG-based visual controller representation
 - `config_writer.py` - Atomic config file writes with backup rotation
+- `device_settings_dialog.py` - Global `[device]` settings dialog (File > Global Settings)
+- `device_config_writer.py` - Line-by-line `[device]` edits preserving comments/unknown keys
 - `driver_manager.py` - Service control (init-agnostic: systemd, OpenRC, runit, etc.)
 
 ## Configuration

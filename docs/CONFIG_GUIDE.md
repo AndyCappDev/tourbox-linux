@@ -113,6 +113,9 @@ The config file uses INI format with these sections:
 
 Configures your TourBox device connection.
 
+These settings can also be edited in the GUI under **File → Global Settings**,
+which preserves your comments and backs the file up before saving.
+
 **Format:** `setting = value`
 
 **Available settings:**

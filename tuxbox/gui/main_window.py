@@ -167,6 +167,12 @@ class TuxBoxConfigWindow(QMainWindow):
 
         file_menu.addSeparator()
 
+        # Settings action (global [device] settings)
+        settings_action = QAction("&Global Settings...", self)
+        settings_action.setStatusTip("Edit settings that apply to the whole driver")
+        settings_action.triggered.connect(self._on_menu_settings)
+        file_menu.addAction(settings_action)
+
         # Restart Driver action
         restart_driver_action = QAction("&Restart Driver", self)
         restart_driver_action.setStatusTip("Restart the TuxBox driver service and reload profiles")
@@ -1262,6 +1268,42 @@ class TuxBoxConfigWindow(QMainWindow):
         """Handle Export Profile menu action"""
         # Delegate to profile manager
         self.profile_manager._on_export_profile()
+
+    def _on_menu_settings(self):
+        """Handle Settings menu action - edit global [device] settings"""
+        from .device_settings_dialog import DeviceSettingsDialog
+        from .device_config_writer import save_device_settings
+
+        dialog = DeviceSettingsDialog(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        changes = dialog.get_changes()
+        if not changes:
+            self.statusBar().showMessage("No settings were changed")
+            return
+
+        success, message = save_device_settings(changes)
+
+        if not success:
+            QMessageBox.warning(self, "Settings Not Saved", message)
+            return
+
+        cleanup_old_backups()
+        self.statusBar().showMessage("Settings saved")
+
+        # None of these settings are re-read while the driver runs, so an
+        # unrestarted driver would keep using the old ones with no sign of it.
+        answer = QMessageBox.question(
+            self,
+            "Restart Driver?",
+            "Settings saved.\n\n"
+            "The driver needs to restart before they take effect. Restart it now?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        if answer == QMessageBox.Yes:
+            self._on_restart_driver()
 
     def _on_restart_driver(self):
         """Handle Restart Driver menu action"""

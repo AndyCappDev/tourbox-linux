@@ -17,9 +17,10 @@
 10. [Using Activate on Release](#using-activate-on-release)
 11. [Configuring Haptic Feedback](#configuring-haptic-feedback)
 12. [Configuring Modifier Key Delay](#configuring-modifier-key-delay)
-13. [Tips & Tricks](#tips--tricks)
-14. [Checking for Updates](#checking-for-updates)
-15. [Troubleshooting](#troubleshooting)
+13. [Global Settings](#global-settings)
+14. [Tips & Tricks](#tips--tricks)
+15. [Checking for Updates](#checking-for-updates)
+16. [Troubleshooting](#troubleshooting)
 
 
 ---
@@ -130,6 +131,7 @@ The GUI has a 4-panel layout:
   - Save (Ctrl+S) - Write changes to config file and apply them
   - Import Profile - Import a profile
   - Export Profile - Export a profile
+  - Global Settings - Edit settings that apply to the whole driver (see [Global Settings](#global-settings))
   - Restart Driver - Restart the TuxBox driver service and reload profiles
   - Quit - Exit the application
 
@@ -1307,6 +1309,47 @@ When omitted (not present in the file), the profile uses the global setting. Thi
 **3. The delay applies to all key combos in the profile**
 - Every mapped action that combines modifier keys with other keys will have the delay
 - Simple key actions (single keys without modifiers) are not affected
+
+---
+
+## Global Settings
+
+**File → Global Settings** edits the settings that apply to the driver as a
+whole, rather than to a single profile. These are stored in the `[device]`
+section of `~/.config/tuxbox/config.conf`.
+
+### Connection
+
+Which transports the driver may use:
+
+| Option | Behaviour |
+|--------|-----------|
+| **Automatic** (default) | Uses the cable when it is plugged in, otherwise falls back to Bluetooth. Switches to USB as soon as the cable appears. |
+| **USB only** | The Bluetooth radio is never used. The driver waits for the cable if the TourBox isn't connected yet. |
+| **Bluetooth only** | USB ports are never checked. |
+
+Choose **USB only** if you always connect by cable. On a laptop this stops the
+driver periodically scanning over Bluetooth for a device that is never there.
+
+### USB
+
+**Serial port** - leave empty unless your TourBox appears on a non-standard
+port. The driver probes all `/dev/ttyACM*` devices regardless.
+
+### Behaviour
+
+- **Haptics** - send haptic settings even when a profile leaves them at their defaults
+- **Modifier delay** - the global default for [Modifier Key Delay](#configuring-modifier-key-delay); individual profiles can override it
+- **Window check** - how often the focused window is checked for automatic profile switching. Not used on KDE Plasma, which reports window changes as they happen
+
+### Applying changes
+
+None of these settings are re-read while the driver is running, so the GUI
+offers to restart the driver after saving. Answer **Yes** for the change to
+take effect.
+
+Your existing comments in `config.conf` are preserved, and a timestamped
+backup is written before each save.
 
 ---
 

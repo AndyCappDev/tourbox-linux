@@ -268,9 +268,11 @@ tuxbox/
 │       ├── control_editor.py                       # Control mapping editor widget
 │       ├── controller_view.py                      # Visual TourBox controller view (SVG-based)
 │       ├── profile_settings_dialog.py              # Profile settings dialog (window matching)
+│       ├── device_settings_dialog.py               # Global [device] settings dialog
 │       ├── driver_manager.py                       # Driver service management widget
 │       ├── ble_listener.py                         # BLE event listener for live testing
 │       ├── config_writer.py                        # Config file write operations (atomic saves)
+│       ├── device_config_writer.py                 # [device] section writes (preserves comments)
 │       ├── README.md                               # GUI package documentation
 │       ├── requirements.txt                        # GUI-specific dependencies (PySide6, qasync)
 │       └── assets/                                 # GUI assets
@@ -399,6 +401,16 @@ tuxbox/
 - Window class and app_id configuration
 - Used when creating/editing profiles
 - Input validation for profile names
+
+**`gui/device_settings_dialog.py`** - Global settings dialog (~230 LOC)
+- Edit the `[device]` section: connection mode, USB port, haptics, timings
+- Returns only the settings the user actually changed
+- Offers a driver restart, since none of these are re-read while running
+
+**`gui/device_config_writer.py`** - `[device]` section writes (~200 LOC)
+- Edits config.conf line by line, preserving comments and unrecognised keys
+- Uncomments template placeholders in place instead of appending duplicates
+- Atomic replace with timestamped backup and restore-on-failure
 
 **`gui/driver_manager.py`** - Driver service management (~150 LOC)
 - Start/stop/restart systemd service

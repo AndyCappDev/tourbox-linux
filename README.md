@@ -81,6 +81,11 @@ The driver **auto-detects** everything:
 - **USB:** Scans `/dev/ttyACM*` devices and probes each for a TourBox response
 - **Bluetooth:** Scans for any device named "TourBox" and connects automatically
 
+If you only ever use one of them, you can switch the other off in the Configuration
+GUI under **File → Global Settings**. Picking **USB only** stops the driver scanning
+over Bluetooth for a device that is never there - worth doing on a laptop running on
+battery. See [Global Settings](docs/GUI_USER_GUIDE.md#global-settings) in the GUI User Guide.
+
 > **Note:** Some Bluetooth equipped models do not require pairing depending on what firmware is installed on them. The driver finds your TourBox automatically by scanning for its name. If the driver doesn't find your TourBox, try putting it in pairing mode (hold the button above the power switch for 2-3 seconds until the LED flashes) and restart the driver with `File->Restart Driver` in the Configuration GUI. After the first successful connection, normal power cycles should reconnect automatically without needing pairing mode again.
 
 ### Run the Installer
